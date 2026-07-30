@@ -30,6 +30,53 @@ env:
   AGENT_IMAGE_FAIL_BYTES: '2040109465'  # 1.9 * 1024^3
 
 jobs:
+  # 시크릿·변수 누락을 **가장 먼저** 드러낸다.
+  # 이 점검이 없으면 ARM64 이미지 빌드를 수십 분 돌린 뒤 자격증명 단계에서 실패하고,
+  # 실패 로그를 볼 권한이 없는 사람은 원인을 알 수 없다.
+  preflight:
+    name: 배포 설정 점검 (시크릿·변수)
+    runs-on: ubuntu-latest
+    steps:
+      - name: 필수 시크릿·변수 확인
+        env:
+          # Secrets 탭
+          AWS_DEPLOY_ROLE_ARN: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          # Variables 탭
+          AWS_REGION_VAR: ${{ vars.AWS_REGION }}
+          ECR_REGISTRY_VAR: ${{ vars.ECR_REGISTRY }}
+          PROD_HOSTED_ZONE_ID: ${{ vars.PROD_HOSTED_ZONE_ID }}
+          PROD_CERTIFICATE_ARN: ${{ vars.PROD_CERTIFICATE_ARN }}
+          PROD_CF_DISTRIBUTION_ID: ${{ vars.PROD_CF_DISTRIBUTION_ID }}
+          PROD_AGENT_RUNTIME_ARN: ${{ vars.PROD_AGENT_RUNTIME_ARN }}
+          PROD_BEDROCK_PROFILE_ARN: ${{ vars.PROD_BEDROCK_PROFILE_ARN }}
+          PROD_BASE_URL: ${{ vars.PROD_BASE_URL }}
+        run: |
+          missing_secrets=""
+          missing_vars=""
+
+          if [ -z "${AWS_DEPLOY_ROLE_ARN}" ]; then
+            missing_secrets="AWS_DEPLOY_ROLE_ARN"
+          fi
+
+          for name in AWS_REGION_VAR ECR_REGISTRY_VAR PROD_HOSTED_ZONE_ID PROD_CERTIFICATE_ARN \
+                      PROD_CF_DISTRIBUTION_ID PROD_AGENT_RUNTIME_ARN PROD_BEDROCK_PROFILE_ARN \
+                      PROD_BASE_URL; do
+            if [ -z "${!name}" ]; then
+              # 환경변수 이름과 GitHub 변수 이름이 다른 두 개는 표시를 맞춘다
+              display="${name%_VAR}"
+              missing_vars="${missing_vars} ${display}"
+            fi
+          done
+
+          if [ -n "${missing_secrets}" ] || [ -n "${missing_vars}" ]; then
+            [ -n "${missing_secrets}" ] && echo "::error::Secrets 누락: ${missing_secrets}"
+            [ -n "${missing_vars}" ] && echo "::error::Variables 누락:${missing_vars}"
+            echo "Settings > Secrets and variables > Actions 에서 등록하세요."
+            echo "Secrets 와 Variables 는 **다른 탭**이다 — 시크릿을 Variables 에 넣으면 여기서 걸린다."
+            exit 1
+          fi
+          echo "시크릿 1개 + 변수 8개 확인 완료"
+
   # main 에 이미 반영된 코드라도 배포 직전에 다시 전체 검증을 강제한다.
   # (ci.yml 자체를 재사용 워크플로로 호출해 lint/typecheck/test/build 를 반복 실행)
   ci:
@@ -39,7 +86,7 @@ jobs:
   build-web:
     name: Build & Push — web (Next.js, ARM64)
     runs-on: ubuntu-latest
-    needs: [ci]
+    needs: [preflight, ci]
     permissions:
       contents: read
       id-token: write
@@ -80,7 +127,7 @@ jobs:
   build-agent:
     name: Build & Push — agent (Strands TS, ARM64)
     runs-on: ubuntu-latest
-    needs: [ci]
+    needs: [preflight, ci]
     permissions:
       contents: read
       id-token: write
@@ -163,7 +210,7 @@ jobs:
   build-audio:
     name: Build & Push — audio (Python Lambda, ARM64)
     runs-on: ubuntu-latest
-    needs: [ci]
+    needs: [preflight, ci]
     permissions:
       contents: read
       id-token: write
