@@ -34,6 +34,12 @@ const GITHUB_REPOSITORY = 'yansonz/waganda';
  */
 const GITHUB_REPOSITORY_WITH_IDS = 'yansonz@18474271/waganda@1315949219';
 
+/**
+ * 배포 잡이 사용하는 GitHub Environment 이름(`.github/workflows/deploy.yml` 의 `environment:`).
+ * environment 가 지정된 잡의 OIDC sub 는 `ref:` 대신 `environment:` 형태로 발급된다.
+ */
+const DEPLOY_ENVIRONMENT = 'prod';
+
 export interface OpsStackProps extends StackProps {
   envConfig: EnvironmentConfig;
 }
@@ -157,16 +163,22 @@ export class WagandaOpsStack extends Stack {
           StringEquals: {
             'token.actions.githubusercontent.com:aud': 'sts.amazonaws.com',
           },
-          // 저장소와 브랜치를 못박는다. PR 이나 다른 저장소의 워크플로는 맡을 수 없다.
-          // `ref:refs/heads/main` 만 허용하므로 포크 PR 로는 자격증명을 얻지 못한다.
+          // 저장소와 브랜치(또는 환경)를 못박는다. 다른 저장소의 워크플로는 맡을 수 없다.
           //
-          // 두 형식을 함께 허용한다 — GitHub 이 발급하는 실제 sub 는 불변 ID 형식이고,
-          // 이름 형식은 향후 GitHub 이 형식을 되돌릴 경우를 대비한 것이다.
-          // 배열은 OR 로 평가되며 둘 다 저장소·브랜치가 고정돼 있어 경계가 느슨해지지 않는다.
+          // GitHub 은 잡에 `environment:` 가 지정되면 sub 를 `...:environment:<name>` 으로,
+          // 없으면 `...:ref:refs/heads/<branch>` 로 발급한다. 배포 잡만 environment 를 쓰므로
+          // **두 형태를 모두 허용해야 한다** — 하나만 넣으면 그 잡만 AccessDenied 가 된다
+          // (실제로 이미지 빌드는 통과하고 배포만 실패했다).
+          //
+          // 이름 형식도 함께 허용한다. GitHub 이 발급하는 실제 sub 는 불변 ID 형식이지만
+          // 향후 형식이 되돌아갈 경우를 대비한 것이다.
+          // 배열은 OR 로 평가되며 모든 항목이 저장소와 브랜치·환경을 고정한다.
           StringLike: {
             'token.actions.githubusercontent.com:sub': [
               `repo:${GITHUB_REPOSITORY_WITH_IDS}:ref:refs/heads/main`,
+              `repo:${GITHUB_REPOSITORY_WITH_IDS}:environment:${DEPLOY_ENVIRONMENT}`,
               `repo:${GITHUB_REPOSITORY}:ref:refs/heads/main`,
+              `repo:${GITHUB_REPOSITORY}:environment:${DEPLOY_ENVIRONMENT}`,
             ],
           },
         },

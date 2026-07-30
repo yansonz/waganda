@@ -45,12 +45,15 @@ describe('GitHub Actions OIDC 배포 역할', () => {
               // `repo:*` 나 `ref:refs/pull/*` 로 넓히면 포크 PR 이 자격증명을 얻는다.
               //
               // GitHub 이 실제로 발급하는 sub 는 불변 ID 형식
-              // (`repo:<owner>@<ownerId>/<repo>@<repoId>`)이다. 이름 형식만 걸면
-              // AccessDenied 가 되므로 두 형식을 함께 허용한다.
+              // (`repo:<owner>@<ownerId>/<repo>@<repoId>`)이고, 잡에 `environment:` 가
+              // 지정되면 `ref:` 대신 `environment:` 형태가 된다. 배포 잡만 environment 를
+              // 쓰므로 두 형태를 모두 허용해야 그 잡이 AccessDenied 를 면한다.
               StringLike: {
                 'token.actions.githubusercontent.com:sub': [
                   'repo:yansonz@18474271/waganda@1315949219:ref:refs/heads/main',
+                  'repo:yansonz@18474271/waganda@1315949219:environment:prod',
                   'repo:yansonz/waganda:ref:refs/heads/main',
+                  'repo:yansonz/waganda:environment:prod',
                 ],
               },
             },

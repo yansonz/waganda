@@ -116,7 +116,12 @@ jobs:
           context: .
           file: ./Dockerfile
           platforms: linux/arm64
-          push: true
+          # Lambda·AgentCore 는 OCI manifest/attestation index 를 거부한다
+          # (`The image manifest, config or layer media type ... is not supported`).
+          # provenance·sbom 을 끄고 Docker manifest v2 로 푸시해야 한다.
+          provenance: false
+          sbom: false
+          outputs: type=image,oci-mediatypes=false,push=true
           tags: |
             ${{ env.ECR_REGISTRY }}/waganda-web:${{ env.IMAGE_TAG }}
             ${{ env.ECR_REGISTRY }}/waganda-web:latest
@@ -159,7 +164,12 @@ jobs:
           context: .
           file: ./agent/Dockerfile
           platforms: linux/arm64
-          push: true
+          # Lambda·AgentCore 는 OCI manifest/attestation index 를 거부한다
+          # (`The image manifest, config or layer media type ... is not supported`).
+          # provenance·sbom 을 끄고 Docker manifest v2 로 푸시해야 한다.
+          provenance: false
+          sbom: false
+          outputs: type=image,oci-mediatypes=false,push=true
           load: false
           tags: |
             ${{ env.ECR_REGISTRY }}/waganda-agent:${{ env.IMAGE_TAG }}
@@ -248,7 +258,12 @@ jobs:
           context: ./audio
           file: ./audio/Dockerfile
           platforms: linux/arm64
-          push: true
+          # Lambda·AgentCore 는 OCI manifest/attestation index 를 거부한다
+          # (`The image manifest, config or layer media type ... is not supported`).
+          # provenance·sbom 을 끄고 Docker manifest v2 로 푸시해야 한다.
+          provenance: false
+          sbom: false
+          outputs: type=image,oci-mediatypes=false,push=true
           tags: |
             ${{ env.ECR_REGISTRY }}/waganda-audio:${{ env.IMAGE_TAG }}
             ${{ env.ECR_REGISTRY }}/waganda-audio:latest
