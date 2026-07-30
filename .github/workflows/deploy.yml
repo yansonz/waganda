@@ -197,8 +197,11 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
 
       # push 단계에서 로컬에 이미지를 남기지 않았으므로 검사를 위해 pull 한다.
+      # 러너는 amd64 라서 `--platform linux/arm64` 를 명시해야 한다
+      # (없으면 `no matching manifest for linux/amd64` 로 실패한다). 실행하지 않고
+      # 메타데이터만 보므로 에뮬레이션은 필요하지 않다.
       - name: 에이전트 이미지 pull
-        run: docker pull "${{ needs.build-agent.outputs.image-ref }}"
+        run: docker pull --platform linux/arm64 "${{ needs.build-agent.outputs.image-ref }}"
 
       - name: 이미지 크기 검사 실행
         run: |
@@ -337,8 +340,11 @@ jobs:
         run: |
           set -euo pipefail
           IMAGE="${{ env.ECR_REGISTRY }}/waganda-web:${{ env.IMAGE_TAG }}"
-          docker pull "$IMAGE"
-          CID=$(docker create "$IMAGE")
+          # 러너는 amd64 이고 이미지는 arm64 전용이라 플랫폼을 명시해야 한다
+          # (없으면 `no matching manifest for linux/amd64` 로 실패한다).
+          # 컨테이너를 실행하지 않고 파일만 꺼내므로 에뮬레이션은 필요하지 않다.
+          docker pull --platform linux/arm64 "$IMAGE"
+          CID=$(docker create --platform linux/arm64 "$IMAGE")
           rm -rf ./static-out && mkdir -p ./static-out
           docker cp "$CID:/app/.next-prod/static" ./static-out/static
           docker rm "$CID"
