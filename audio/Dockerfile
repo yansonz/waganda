@@ -10,7 +10,13 @@
 FROM public.ecr.aws/lambda/python:3.12-arm64 AS builder
 
 # 컴파일에 필요한 도구만 builder 스테이지에 설치 (최종 이미지에는 남지 않음)
-RUN dnf install -y gcc gcc-c++ make && dnf clean all
+# praat-parselmouth 는 linux aarch64 wheel 을 배포하지 않아 arm64 에서는 항상 소스 빌드다.
+# 그 빌드는 scikit-build(CMake) + Ninja 를 요구하므로 ninja-build 를 함께 설치한다.
+RUN dnf install -y gcc gcc-c++ make ninja-build && dnf clean all
+
+# parselmouth 가 번들한 pybind11 의 CMakeLists 는 `cmake_minimum_required(VERSION 3.4)` 라서
+# 최신 CMake(4.x)가 호환성 제거를 이유로 구성 단계에서 실패한다. 정책 하한을 명시해 통과시킨다.
+ENV CMAKE_ARGS="-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
 
 COPY requirements.txt .
 # --no-cache-dir 로 pip 캐시가 레이어에 남지 않게 하고,

@@ -26,7 +26,7 @@ export function getEnvironmentConfig(env: string): EnvironmentConfig {
       domain: 'waganda-dev.yanbert.com',
       resourceSuffix: 'dev',
       removalPolicy: RemovalPolicy.DESTROY, // 개발 환경에서는 삭제 가능
-      region: 'ap-northeast-1', // 확정 필요 (AgentCore, Transcribe ko-KR, Bedrock 가용성 확인)
+      region: 'ap-northeast-2', // 서울 리전
       account: undefined, // 배포 시점에 결정, 전용 계정 ID 필요
     },
     prod: {
@@ -34,7 +34,7 @@ export function getEnvironmentConfig(env: string): EnvironmentConfig {
       domain: 'waganda.yanbert.com',
       resourceSuffix: 'prod',
       removalPolicy: RemovalPolicy.RETAIN, // 프로덕션에서는 데이터 보존
-      region: 'ap-northeast-1',
+      region: 'ap-northeast-2', // 서울 리전
       account: undefined,
     },
   };

@@ -1,7 +1,8 @@
 # 배포 워크플로: main 브랜치에 머지될 때만 실행한다.
 # CI(ci.yml)가 이 워크플로 직전에 재실행되어 전부 통과해야 다음 단계로 진행한다.
 # ARM64 컨테이너 3개(web/agent/audio)를 빌드해 ECR 에 푸시하고,
-# 에이전트 이미지 크기 검사 → dev 배포 → 스모크 테스트 → prod 배포 순으로 진행한다.
+# 에이전트 이미지 크기 검사 → prod 배포 → 스모크 테스트 순으로 진행한다.
+# dev 환경은 운영하지 않는다(prod 단독 배포).
 # 각 job 은 이전 job 의 성공을 needs 로 강제하므로 한 단계라도 실패하면 이후 단계는 실행되지 않는다.
 name: Deploy
 
@@ -108,10 +109,12 @@ jobs:
 
       # 이미지 크기 검사를 위해 로컬 도커 데몬에도 로드한다 (push=true 만으로는
       # 로컬에 이미지가 남지 않아 `docker image inspect` 대상이 없음).
+      # agent/Dockerfile 은 lib/·packages/schemas·package-lock.json 을 복사하므로
+      # 빌드 컨텍스트가 저장소 루트여야 한다(./agent 로 두면 COPY 가 실패한다).
       - name: agent 이미지 빌드 (로컬 로드 + 푸시)
         uses: docker/build-push-action@v6
         with:
-          context: ./agent
+          context: .
           file: ./agent/Dockerfile
           platforms: linux/arm64
           push: true
@@ -217,60 +220,10 @@ jobs:
         run: |
           echo "audio/Dockerfile 이 아직 없습니다 (작업 8 미착수). audio 이미지 배포를 건너뜁니다."
 
-  deploy-dev:
-    name: cdk deploy (dev)
-    runs-on: ubuntu-latest
-    needs: [build-web, check-agent-image-size, build-audio]
-    environment: dev
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - name: 저장소 체크아웃
-        uses: actions/checkout@v4
-
-      - name: Node.js 설정
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-
-      - name: 의존성 설치
-        run: npm ci
-
-      - name: AWS 자격증명 설정 (OIDC role assume)
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: cdk deploy --all (dev)
-        working-directory: infrastructure
-        run: npx cdk deploy --all --require-approval never --context env=dev
-        env:
-          WAGANDA_IMAGE_TAG: ${{ env.IMAGE_TAG }}
-
-  smoke-test:
-    name: 스모크 테스트 (dev)
-    runs-on: ubuntu-latest
-    needs: [deploy-dev]
-    environment: dev
-    permissions:
-      contents: read
-    steps:
-      - name: 저장소 체크아웃
-        uses: actions/checkout@v4
-
-      - name: 스모크 테스트 실행
-        env:
-          BASE_URL: ${{ vars.DEV_BASE_URL }}
-          AGENT_PING_URL: ${{ vars.DEV_AGENT_PING_URL }}
-        run: bash scripts/smoke-test.sh
-
   deploy-prod:
     name: cdk deploy (prod)
     runs-on: ubuntu-latest
-    needs: [smoke-test]
+    needs: [build-web, check-agent-image-size, build-audio]
     environment: prod
     permissions:
       contents: read
@@ -296,6 +249,27 @@ jobs:
 
       - name: cdk deploy --all (prod)
         working-directory: infrastructure
-        run: npx cdk deploy --all --require-approval never --context env=prod
+        run: |
+          npx cdk deploy --all --require-approval never \
+            --context env=prod \
+            --context hostedZoneId="${{ vars.PROD_HOSTED_ZONE_ID }}" \
+            --context certificateArn="${{ vars.PROD_CERTIFICATE_ARN }}"
         env:
           WAGANDA_IMAGE_TAG: ${{ env.IMAGE_TAG }}
+
+  smoke-test:
+    name: 스모크 테스트 (prod)
+    runs-on: ubuntu-latest
+    needs: [deploy-prod]
+    environment: prod
+    permissions:
+      contents: read
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+
+      - name: 스모크 테스트 실행
+        env:
+          BASE_URL: ${{ vars.PROD_BASE_URL }}
+          AGENT_PING_URL: ${{ vars.PROD_AGENT_PING_URL }}
+        run: bash scripts/smoke-test.sh

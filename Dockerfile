@@ -31,9 +31,20 @@ RUN npm run build
 FROM --platform=linux/arm64 node:22-slim AS runner
 WORKDIR /app
 
+# AWS Lambda Web Adapter — Lambda 런타임 API 와 HTTP 서버를 잇는 확장.
+# 이것이 없으면 `node server.js` 는 3000 포트에 뜨기만 하고 런타임 API 에 응답하지 않아
+# init/invoke 가 모두 타임아웃한다(실제로 502 를 겪었다).
+# Lambda 외부(로컬·ECS)에서는 확장이 실행되지 않으므로 일반 웹 서버로 그대로 동작한다.
+COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:1.0.1 /lambda-adapter /opt/extensions/lambda-adapter
+
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
+# 어댑터가 프록시할 포트를 Next.js 포트와 맞춘다(기본값은 8080).
+ENV AWS_LWA_PORT=3000
+# 준비 확인은 TCP 로 한다. HTTP GET / 로 확인하면 루트 페이지가 DynamoDB 를 읽는 동안
+# 200 이 아닐 수 있어 콜드 스타트가 불필요하게 실패한다.
+ENV AWS_LWA_READINESS_CHECK_PROTOCOL=tcp
 
 # 비루트 사용자로 실행 (컨테이너 권한 최소화)
 RUN groupadd --system --gid 1001 nodejs \

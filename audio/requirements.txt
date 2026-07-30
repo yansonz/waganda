@@ -3,5 +3,7 @@
 # 로컬 테스트 환경 재현을 위해 명시한다.
 numpy==1.26.4
 scipy==1.13.1
-praat-parselmouth==0.4.3
+# praat-parselmouth 는 linux aarch64 wheel 이 없어 arm64 에서 소스 빌드된다.
+# 0.4.3 은 최신 CMake 로 구성이 실패하므로 0.4.7 을 쓴다(audio/Dockerfile 의 CMAKE_ARGS 참조).
+praat-parselmouth==0.4.7
 boto3==1.34.144

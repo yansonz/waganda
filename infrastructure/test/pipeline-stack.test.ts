@@ -87,16 +87,34 @@ describe('Pipeline Stack Validation', () => {
     }, 2);
   });
 
-  it('should create audio processing Lambda with ARM64 architecture', () => {
+  it('오디오 Lambda 는 컨테이너 이미지로 ARM64 에서 돈다', () => {
     const stack = createPipelineStack();
     const template = Template.fromStack(stack);
 
-    // AudioProcessorLambda는 DockerImageFunction으로 ARM64 아키텍처를 가짐
-    // CloudFormation에서는 모든 Lambda 함수가 AWS::Lambda::Function으로 표현됨
-    // 최소 1개 이상의 Lambda는 Architectures에 arm64를 포함해야 함
-    template.resourcePropertiesCountIs('AWS::Lambda::Function', {
-      Architectures: cdk.assertions.Match.arrayWith(['arm64']),
-    }, 1);
+    // 오디오 Lambda 만 PackageType=Image 다(트리거 2개는 zip 번들).
+    template.resourcePropertiesCountIs(
+      'AWS::Lambda::Function',
+      {
+        PackageType: 'Image',
+        Architectures: cdk.assertions.Match.arrayWith(['arm64']),
+      },
+      1,
+    );
+  });
+
+  it('우리가 정의한 Lambda 3개(오디오·트리거 2개)는 모두 ARM64 다', () => {
+    const stack = createPipelineStack();
+    const template = Template.fromStack(stack);
+
+    // S3 알림 설정용 CDK 커스텀 리소스 핸들러는 CDK 가 만들며 아키텍처를 지정하지 않는다.
+    // 그래서 arm64 로 지정된 함수의 개수만 단정한다.
+    template.resourcePropertiesCountIs(
+      'AWS::Lambda::Function',
+      {
+        Architectures: ['arm64'],
+      },
+      3,
+    );
   });
 
   it('should create EventBridge rule target with Lambda', () => {
@@ -165,17 +183,57 @@ describe('Pipeline Stack Validation', () => {
     expect(hasS3Notification).toBe(true);
   });
 
-  it('should create AgentCore Runtime with configured limits', () => {
+  it('AgentCore Runtime 은 퍼블릭 네트워크와 세션 수명 제한으로 만들어진다', () => {
     const stack = createPipelineStack();
     const template = Template.fromStack(stack);
 
-    // AgentCore Runtime L1 리소스 확인
-    // 배포 전 스키마 재확인 필요
+    // AWS::BedrockAgentCore::Runtime 의 실제 스키마를 단정한다.
+    // NetworkMode=PUBLIC 은 NAT 상시 과금을 피하기 위한 결정이다.
     template.hasResourceProperties('AWS::BedrockAgentCore::Runtime', {
-      maxIterations: 12,
-      timeoutSeconds: 300,
-      idleRuntimeSessionTimeout: 60,
-      maxLifetime: 900,
+      AgentRuntimeName: 'waganda_agent_dev',
+      NetworkConfiguration: { NetworkMode: 'PUBLIC' },
+      ProtocolConfiguration: 'HTTP',
+      LifecycleConfiguration: {
+        IdleRuntimeSessionTimeout: 60,
+        MaxLifetime: 900,
+      },
+    });
+  });
+
+  it('AgentCore Runtime 에 필수 환경변수가 주입되고 시크릿은 들어가지 않는다', () => {
+    const stack = createPipelineStack();
+    const template = Template.fromStack(stack);
+
+    // 에이전트는 lib/config.ts 의 getRuntimeConfig() 를 거치므로 이 값들이 없으면 즉시 실패한다.
+    template.hasResourceProperties('AWS::BedrockAgentCore::Runtime', {
+      EnvironmentVariables: cdk.assertions.Match.objectLike({
+        WAGANDA_ENV: 'dev',
+        WAGANDA_TABLE_NAME: 'waganda-dev',
+        WAGANDA_MEDIA_BUCKET: 'waganda-media-dev',
+      }),
+    });
+
+    // 시크릿(검색 키)은 환경변수로 넣지 않는다 — 평문으로 템플릿·콘솔에 남기 때문이다.
+    const runtimes = template.findResources('AWS::BedrockAgentCore::Runtime');
+    for (const runtime of Object.values(runtimes)) {
+      const envVars = (runtime.Properties?.EnvironmentVariables ?? {}) as Record<string, unknown>;
+      expect(Object.keys(envVars)).not.toContain('SERPAPI_KEY');
+    }
+  });
+
+  it('AgentCore 실행 역할이 SSM SecureString 을 읽을 수 있다 (검색 키 조회)', () => {
+    const stack = createPipelineStack();
+    const template = Template.fromStack(stack);
+
+    template.hasResourceProperties('AWS::IAM::Policy', {
+      PolicyDocument: cdk.assertions.Match.objectLike({
+        Statement: cdk.assertions.Match.arrayWith([
+          cdk.assertions.Match.objectLike({
+            Sid: 'SSMParameterRead',
+            Action: ['ssm:GetParameter', 'ssm:GetParameters'],
+          }),
+        ]),
+      }),
     });
   });
 });

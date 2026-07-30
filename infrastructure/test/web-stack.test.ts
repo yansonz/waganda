@@ -152,4 +152,32 @@ describe('WagandaWebStack', () => {
       }),
     });
   });
+
+  it('웹 Lambda 는 Bedrock 추론 프로파일을 호출할 수 있다', () => {
+    // lib/agent/labelDirect.ts 등이 웹 프로세스에서 직접 Converse 를 부른다.
+    // 권한이 없으면 라벨 인식 폴백·소믈리에 분석이 AccessDenied 로 죽는다.
+    template.hasResourceProperties('AWS::IAM::Policy', {
+      PolicyDocument: Match.objectLike({
+        Statement: Match.arrayWith([
+          Match.objectLike({
+            Sid: 'BedrockInference',
+            Action: ['bedrock:InvokeModel', 'bedrock:Converse'],
+          }),
+        ]),
+      }),
+    });
+  });
+
+  it('CloudFront 가 Function URL 을 호출할 권한이 두 액션 모두 부여된다', () => {
+    // 2025-10 이후 Function URL 은 InvokeFunctionUrl 과 InvokeFunction 을 모두 요구한다.
+    // 하나만 있으면 CloudFront 경유 요청이 전부 403 이 된다.
+    template.hasResourceProperties('AWS::Lambda::Permission', {
+      Action: 'lambda:InvokeFunctionUrl',
+      Principal: 'cloudfront.amazonaws.com',
+    });
+    template.hasResourceProperties('AWS::Lambda::Permission', {
+      Action: 'lambda:InvokeFunction',
+      Principal: 'cloudfront.amazonaws.com',
+    });
+  });
 });

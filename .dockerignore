@@ -7,6 +7,8 @@ coverage
 test-results
 playwright-report
 e2e
+# 실제 라벨 사진(HEIC)·부부의 실제 음성(m4a). 빌드 컨텍스트에 넣지 않는다.
+test-data
 infrastructure/cdk.out
 agent/dist
 audio/.venv

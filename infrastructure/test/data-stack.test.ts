@@ -133,46 +133,45 @@ describe('Data Stack Validation', () => {
     }, 3);
   });
 
-  it('should create SSM parameters for secrets', () => {
+  it('SecureString 시크릿은 CDK 로 만들지 않는다 — 템플릿에 SSM 파라미터가 없어야 한다', () => {
     const stack = createDataStack();
     const template = Template.fromStack(stack);
 
-    // 최소 4개의 SSM 파라미터 필요
-    // (Google ID, Google Secret, JWT Key, Allowlist)
-    template.resourceCountIs('AWS::SSM::Parameter', 4);
+    // CloudFormation 은 SecureString 파라미터를 만들 수 없다.
+    // 시크릿은 scripts/put-secrets.sh 로 사람이 사전 생성한다.
+    template.resourceCountIs('AWS::SSM::Parameter', 0);
   });
 
-  it('should use correct SSM parameter names matching lib/config.ts conventions', () => {
+  it('SSM 파라미터 이름 규약을 lib/config.ts 와 같은 경로로 노출한다', () => {
+    // 규약은 프로덕션 코드의 상수에서 가져와 단정한다(문자열을 테스트에 재작성하지 않는다).
+    const names = WagandaDataStack.SSM_PARAM_NAMES;
+
+    expect(names.googleClientId('prod')).toBe('/waganda/prod/google/client-id');
+    expect(names.googleClientSecret('prod')).toBe('/waganda/prod/google/client-secret');
+    expect(names.jwtSecret('prod')).toBe('/waganda/prod/auth/jwt-secret');
+    expect(names.editorAllowlist('prod')).toBe('/waganda/prod/auth/editor-allowlist');
+    // 선택 항목(라벨 보강용 웹 검색 키) — put-secrets.sh 의 --serpapi-key 와 같은 경로여야 한다.
+    expect(names.serpApiKey('prod')).toBe('/waganda/prod/search/serpapi-key');
+  });
+
+  it('Claude 추론 프로파일 3개를 글로벌 프로파일에서 복사해 만든다', () => {
     const stack = createDataStack();
     const template = Template.fromStack(stack);
 
-    // lib/config.ts의 SSM_KEYS와 일치하는 파라미터 이름 확인:
-    // - google/client-id
-    // - google/client-secret
-    // - auth/jwt-secret
-    // - auth/editor-allowlist
-    const resources = template.toJSON().Resources;
-    const expectedPrefixes = [
-      '/waganda/dev/google/client-id',
-      '/waganda/dev/google/client-secret',
-      '/waganda/dev/auth/jwt-secret',
-      '/waganda/dev/auth/editor-allowlist',
-    ];
+    // Bedrock 은 온디맨드 모델 ID 를 거부한다. 태그 귀속을 위해 애플리케이션 프로파일을 만든다.
+    template.resourceCountIs('AWS::Bedrock::ApplicationInferenceProfile', 3);
 
-    const params = Object.entries(resources || {})
-      .filter(([_name, resource]: [string, unknown]) => {
-        const resObj = resource as Record<string, unknown>;
-        return resObj.Type === 'AWS::SSM::Parameter';
-      })
-      .map(([_name, resource]: [string, unknown]) => {
-        const resObj = resource as Record<string, unknown>;
-        const props = resObj.Properties as Record<string, unknown> | undefined;
-        return props?.Name as string | undefined;
-      })
-      .filter(Boolean);
+    // 리전 경계를 넘어 라우팅하는 `global.` 프로파일에서 복사해야 스로틀링에 강하다.
+    // CopyFrom 은 계정 ID 토큰이 섞인 Fn::Join 이므로 직렬화해서 확인한다.
+    const profiles = template.findResources('AWS::Bedrock::ApplicationInferenceProfile');
+    const serialized = Object.values(profiles).map((p) => JSON.stringify(p.Properties?.ModelSource));
 
-    for (const expected of expectedPrefixes) {
-      expect(params).toContain(expected);
+    for (const source of [
+      'global.anthropic.claude-haiku-4-5-20251001-v1:0',
+      'global.anthropic.claude-sonnet-5',
+      'global.anthropic.claude-opus-5',
+    ]) {
+      expect(serialized.some((s) => s.includes(`inference-profile/${source}`))).toBe(true);
     }
   });
 });

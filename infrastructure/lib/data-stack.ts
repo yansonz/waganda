@@ -4,15 +4,13 @@
  * - 미디어 S3 버킷 (버전 관리, 퍼블릭 차단)
  * - 에이전트 세션 S3 버킷
  * - ECR 리포지토리 3개 (web, agent, audio)
- * - Bedrock 애플리케이션 추론 프로파일
- * - SSM SecureString 파라미터 (시크릿 참조)
  */
-import { Stack, StackProps, RemovalPolicy } from 'aws-cdk-lib';
+import { Stack, StackProps, RemovalPolicy, CfnOutput } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
+import * as bedrock from 'aws-cdk-lib/aws-bedrock';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as ecr from 'aws-cdk-lib/aws-ecr';
-import * as ssm from 'aws-cdk-lib/aws-ssm';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import { EnvironmentConfig } from './env';
 
@@ -27,6 +25,12 @@ export class WagandaDataStack extends Stack {
   public readonly webEcrRepo: ecr.Repository;
   public readonly agentEcrRepo: ecr.Repository;
   public readonly audioEcrRepo: ecr.Repository;
+  /** Claude Haiku 4.5 (기본 모델) */
+  public readonly haikuProfile: bedrock.CfnApplicationInferenceProfile;
+  /** Claude Sonnet 5 */
+  public readonly sonnetProfile: bedrock.CfnApplicationInferenceProfile;
+  /** Claude Opus 5 */
+  public readonly opusProfile: bedrock.CfnApplicationInferenceProfile;
 
   constructor(scope: Construct, id: string, props: DataStackProps) {
     super(scope, id, props);
@@ -116,41 +120,100 @@ export class WagandaDataStack extends Stack {
     this.agentEcrRepo = createEcrRepo('agent');
     this.audioEcrRepo = createEcrRepo('audio');
 
-    // SSM SecureString 파라미터 (값은 배포 시 수동 주입)
-    // 실제 값은 AWS Console에서 별도로 설정해야 함
-    // CDK에서는 파라미터 이름만 정의하고 placeholder는 생성하지 않음
+    /**
+     * Bedrock 애플리케이션 추론 프로파일.
+     *
+     * Bedrock 은 온디맨드 모델 ID 를 거부하고 **추론 프로파일**로만 호출된다.
+     * 시스템 정의 `global.*` 프로파일을 그대로 쓰면 비용을 태그로 귀속시킬 수 없으므로,
+     * 태그가 붙은 애플리케이션 프로파일을 만들어 그 ARN 으로 호출한다
+     * (앱 수준 태깅으로 Project=waganda / Environment 가 붙는다).
+     *
+     * `global.` 접두 프로파일은 리전 경계 없이 라우팅해 스로틀링을 줄인다.
+     * ARN 은 생성 시 임의 ID 가 붙어 예측할 수 없으므로 출력으로 노출하고,
+     * 소비 스택(web/pipeline)은 컨텍스트로 받는다.
+     */
+    const createInferenceProfile = (
+      id: string,
+      name: string,
+      sourceProfileId: string,
+    ): bedrock.CfnApplicationInferenceProfile =>
+      new bedrock.CfnApplicationInferenceProfile(this, id, {
+        inferenceProfileName: name,
+        // Description 패턴은 `^([0-9a-zA-Z:.][ _-]?)+$` 다 —
+        // 특수문자를 연속으로 쓸 수 없어 ` - ` 같은 구분자를 넣으면 배포가 거부된다.
+        description: `Waganda ${envConfig.env} ${sourceProfileId}`,
+        modelSource: {
+          copyFrom: `arn:aws:bedrock:${envConfig.region}:${this.account}:inference-profile/${sourceProfileId}`,
+        },
+      });
 
-    // Google OAuth 클라이언트
-    new ssm.StringParameter(this, 'GoogleClientIdParam', {
-      parameterName: `/waganda/${envConfig.env}/google/client-id`,
-      stringValue: 'PLACEHOLDER_DEPLOY_TIME_SET',
-      description: 'Google OAuth Client ID',
+    this.haikuProfile = createInferenceProfile(
+      'HaikuInferenceProfile',
+      `waganda-haiku-4-5-${envConfig.resourceSuffix}`,
+      'global.anthropic.claude-haiku-4-5-20251001-v1:0',
+    );
+    this.sonnetProfile = createInferenceProfile(
+      'SonnetInferenceProfile',
+      `waganda-sonnet-5-${envConfig.resourceSuffix}`,
+      'global.anthropic.claude-sonnet-5',
+    );
+    this.opusProfile = createInferenceProfile(
+      'OpusInferenceProfile',
+      `waganda-opus-5-${envConfig.resourceSuffix}`,
+      'global.anthropic.claude-opus-5',
+    );
+
+    // 프로파일 ARN 은 예측 불가하므로 출력으로 노출한다.
+    // 재배포 시 `-c bedrockModelProfileArn=<haiku ARN>` 으로 소비 스택에 주입한다.
+    new CfnOutput(this, 'HaikuInferenceProfileArnOutput', {
+      value: this.haikuProfile.attrInferenceProfileArn,
+      description: 'Claude Haiku 4.5 application inference profile ARN',
+    });
+    new CfnOutput(this, 'SonnetInferenceProfileArnOutput', {
+      value: this.sonnetProfile.attrInferenceProfileArn,
+      description: 'Claude Sonnet 5 application inference profile ARN',
+    });
+    new CfnOutput(this, 'OpusInferenceProfileArnOutput', {
+      value: this.opusProfile.attrInferenceProfileArn,
+      description: 'Claude Opus 5 application inference profile ARN',
     });
 
-    new ssm.StringParameter(this, 'GoogleClientSecretParam', {
-      parameterName: `/waganda/${envConfig.env}/google/client-secret`,
-      stringValue: 'PLACEHOLDER_DEPLOY_TIME_SET',
-      description: 'Google OAuth Client Secret',
-    });
+    // AgentCore Runtime 이 에이전트 이미지를 가져올 수 있게 리포지토리 측에서도 허용한다.
+    // 실행 역할 권한만으로는 서비스 주체가 리포지토리 정책에 막히는 경우가 있어 양쪽을 모두 부여한다.
+    // 범위는 같은 계정의 AgentCore 서비스로 제한한다.
+    this.agentEcrRepo.addToResourcePolicy(
+      new iam.PolicyStatement({
+        sid: 'AllowAgentCorePull',
+        principals: [new iam.ServicePrincipal('bedrock-agentcore.amazonaws.com')],
+        actions: ['ecr:BatchGetImage', 'ecr:GetDownloadUrlForLayer', 'ecr:BatchCheckLayerAvailability'],
+        conditions: {
+          StringEquals: { 'aws:SourceAccount': this.account },
+        },
+      }),
+    );
 
-    // JWT 서명 키 (lib/config.ts의 'auth/jwt-secret' 경로와 일치)
-    new ssm.StringParameter(this, 'JwtSignKeyParam', {
-      parameterName: `/waganda/${envConfig.env}/auth/jwt-secret`,
-      stringValue: 'PLACEHOLDER_DEPLOY_TIME_SET',
-      description: 'JWT Signing Key (HS256)',
-    });
-
-    // 편집자 허용 목록 (쉼표 구분 이메일, lib/config.ts의 'auth/editor-allowlist' 경로와 일치)
-    new ssm.StringParameter(this, 'AllowlistParam', {
-      parameterName: `/waganda/${envConfig.env}/auth/editor-allowlist`,
-      stringValue: 'PLACEHOLDER_DEPLOY_TIME_SET',
-      description: 'Comma-separated list of allowed editor emails',
-    });
-
-    // Bedrock 애플리케이션 추론 프로파일
-    // L1 리소스 사용 (CfnApplicationInferenceProfile)
-    // 주의: 아직 CloudFormation L1이 없을 수 있으므로 실제 배포 시 콘솔에서 생성 또는
-    // 향후 CfnResource 사용 필요
-    // 현재는 구조만 유지
+    /**
+     * SSM SecureString 파라미터는 CDK에서 생성하지 않는다.
+     * 이유:
+     * 1. CloudFormation은 SecureString 파라미터를 생성할 수 없다.
+     *    `aws ssm put-parameter --type SecureString` 으로만 생성 가능.
+     * 2. 배포 전에 사람이 AWS CLI로 수동 생성하고, CDK는 생성하지 않는다.
+     * 3. 파라미터 이름 규약은 아래 상수로 노출된다.
+     * 배포 워크플로: infrastructure/scripts/put-secrets.sh 참조.
+     */
   }
+
+  /**
+   * SSM SecureString 파라미터 이름 규약.
+   * 배포 전에 사람이 AWS CLI로 이름 기반으로 생성해야 한다.
+   * 예: aws ssm put-parameter --name /waganda/prod/google/client-id --type SecureString --value "..."
+   */
+  public static readonly SSM_PARAM_NAMES = {
+    googleClientId: (env: string) => `/waganda/${env}/google/client-id`,
+    googleClientSecret: (env: string) => `/waganda/${env}/google/client-secret`,
+    jwtSecret: (env: string) => `/waganda/${env}/auth/jwt-secret`,
+    editorAllowlist: (env: string) => `/waganda/${env}/auth/editor-allowlist`,
+    /** 라벨 보강용 웹 검색 키. **선택 항목**이며 없으면 검색 없이 보강한다. */
+    serpApiKey: (env: string) => `/waganda/${env}/search/serpapi-key`,
+  } as const;
 }
