@@ -1,0 +1,213 @@
+# CI 워크플로: push/PR 시 lint → typecheck → test → build 순으로 검증한다.
+# 하나라도 실패하면 deploy.yml 이 참조하는 build 성공 상태가 만들어지지 않으므로
+# main 배포가 사실상 이 워크플로의 성공을 전제로 한다.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  # deploy.yml 이 main 배포 직전에 이 워크플로를 재사용 호출해 재검증한다
+  workflow_call:
+
+# 최소 권한 원칙: 코드 읽기만 필요하다 (배포·PR 코멘트 등 쓰기 권한 없음)
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  lint:
+    name: Lint (ESLint)
+    runs-on: ubuntu-latest
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Node.js 설정
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: 의존성 설치 (root + workspaces)
+        run: npm ci
+
+      - name: ESLint 실행
+        run: npm run lint
+
+  typecheck:
+    name: Typecheck (app · agent · infrastructure)
+    runs-on: ubuntu-latest
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Node.js 설정
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: 의존성 설치 (root + workspaces)
+        run: npm ci
+
+      # 루트 package.json의 typecheck 스크립트가
+      # `tsc --noEmit`(app) 실행 후 `--workspaces --if-present`로
+      # agent · infrastructure 워크스페이스의 typecheck를 순차 실행한다
+      - name: 전체 타입체크 실행 (app · agent · infrastructure)
+        run: npm run typecheck
+
+  test:
+    name: Test (vitest 루트 + agent + infrastructure)
+    runs-on: ubuntu-latest
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Node.js 설정
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: 의존성 설치 (root + workspaces)
+        run: npm ci
+
+      - name: 루트 단위·통합 테스트 (vitest)
+        run: npm run test
+
+      - name: 에이전트 테스트
+        run: npm run test:agent
+
+      - name: 인프라(CDK) 테스트
+        run: npm run test:infra
+
+  build:
+    name: Build (Next.js)
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck, test]
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Node.js 설정
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: 의존성 설치 (root + workspaces)
+        run: npm ci
+
+      - name: Next.js standalone 빌드
+        run: npm run build
+
+  # Python 오디오 Lambda(audio/)는 별도 venv로 격리해 pytest 실행.
+  # audio/ 디렉토리가 아직 없는 초기 단계에서도 워크플로가 깨지지 않도록
+  # requirements 파일 존재 여부를 먼저 확인한다.
+  audio-test:
+    name: Test (Python audio Lambda)
+    runs-on: ubuntu-latest
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+
+      - name: audio/ 디렉토리 존재 확인
+        id: check
+        run: |
+          if [ -d "audio" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Python 설정
+        if: steps.check.outputs.exists == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # 조직 개발 정책: Python은 가상환경을 구성해 실행한다
+      - name: venv 생성 및 의존성 설치
+        if: steps.check.outputs.exists == 'true'
+        working-directory: audio
+        run: |
+          python3 -m venv .venv
+          . .venv/bin/activate
+          pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+          pip install pytest
+
+      - name: pytest 실행
+        if: steps.check.outputs.exists == 'true'
+        working-directory: audio
+        run: |
+          . .venv/bin/activate
+          pytest
+
+      - name: audio/ 없음 — 스킵
+        if: steps.check.outputs.exists == 'false'
+        run: echo "audio/ 디렉토리가 아직 없어 이 작업(job)을 스킵합니다 (작업 8 미착수)."
+
+  # Playwright E2E — DynamoDB Local(docker)로 실제 데이터 경로를 검증한다.
+  # webServer 명령 체인이 컨테이너 기동·시드를 먼저 수행한다(e2e/fixtures/prepare.ts).
+  e2e:
+    name: E2E (Playwright + DynamoDB Local)
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck, test]
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Node.js 설정
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: 의존성 설치 (root + workspaces)
+        run: npm ci
+
+      - name: Playwright 브라우저 설치
+        run: npx playwright install --with-deps chromium
+
+      - name: Next.js 빌드
+        run: npm run build
+
+      - name: E2E 실행
+        run: npm run test:e2e
+        env:
+          CI: 'true'
+
+      - name: 실패 시 리포트 업로드
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+  # deploy.yml 이 참조할 수 있는 단일 게이트.
+  # lint/typecheck/test/build/e2e/audio-test 전체가 성공해야만 true 를 출력한다.
+  ci-success:
+    name: CI 성공 게이트
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck, test, build, e2e, audio-test]
+    if: always()
+    steps:
+      - name: 모든 선행 job 성공 확인
+        run: |
+          if [ "${{ contains(needs.*.result, 'failure') }}" = "true" ] || \
+             [ "${{ contains(needs.*.result, 'cancelled') }}" = "true" ]; then
+            echo "하나 이상의 job이 실패했습니다. 배포를 진행할 수 없습니다."
+            exit 1
+          fi
+          echo "모든 CI job이 성공했습니다."

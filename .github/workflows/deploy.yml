@@ -1,0 +1,301 @@
+# 배포 워크플로: main 브랜치에 머지될 때만 실행한다.
+# CI(ci.yml)가 이 워크플로 직전에 재실행되어 전부 통과해야 다음 단계로 진행한다.
+# ARM64 컨테이너 3개(web/agent/audio)를 빌드해 ECR 에 푸시하고,
+# 에이전트 이미지 크기 검사 → dev 배포 → 스모크 테스트 → prod 배포 순으로 진행한다.
+# 각 job 은 이전 job 의 성공을 needs 로 강제하므로 한 단계라도 실패하면 이후 단계는 실행되지 않는다.
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+# 최소 권한 + OIDC. 장기 액세스 키를 저장소에 두지 않는다.
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-${{ github.workflow }}
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '22'
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  ECR_REGISTRY: ${{ vars.ECR_REGISTRY }} # 예: <account>.dkr.ecr.<region>.amazonaws.com
+  IMAGE_TAG: ${{ github.sha }}
+  # design.md 상한: AgentCore 컨테이너 이미지는 2GB 상한.
+  # 1.6GB(경고) / 1.9GB(실패) 임계값은 scripts/check-agent-image-size.sh 에서 사용.
+  AGENT_IMAGE_WARN_BYTES: '1717986918'  # 1.6 * 1024^3
+  AGENT_IMAGE_FAIL_BYTES: '2040109465'  # 1.9 * 1024^3
+
+jobs:
+  # main 에 이미 반영된 코드라도 배포 직전에 다시 전체 검증을 강제한다.
+  # (ci.yml 자체를 재사용 워크플로로 호출해 lint/typecheck/test/build 를 반복 실행)
+  ci:
+    name: CI 재검증
+    uses: ./.github/workflows/ci.yml
+
+  build-web:
+    name: Build & Push — web (Next.js, ARM64)
+    runs-on: ubuntu-latest
+    needs: [ci]
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+
+      - name: AWS 자격증명 설정 (OIDC role assume)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: ECR 로그인
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: QEMU 설정 (ARM64 크로스 빌드)
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Docker Buildx 설정
+        uses: docker/setup-buildx-action@v3
+
+      - name: web 이미지 빌드 및 푸시
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ env.ECR_REGISTRY }}/waganda-web:${{ env.IMAGE_TAG }}
+            ${{ env.ECR_REGISTRY }}/waganda-web:latest
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web
+
+  build-agent:
+    name: Build & Push — agent (Strands TS, ARM64)
+    runs-on: ubuntu-latest
+    needs: [ci]
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      image-ref: ${{ steps.set-ref.outputs.image_ref }}
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+
+      - name: AWS 자격증명 설정 (OIDC role assume)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: ECR 로그인
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: QEMU 설정 (ARM64 크로스 빌드)
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Docker Buildx 설정
+        uses: docker/setup-buildx-action@v3
+
+      # 이미지 크기 검사를 위해 로컬 도커 데몬에도 로드한다 (push=true 만으로는
+      # 로컬에 이미지가 남지 않아 `docker image inspect` 대상이 없음).
+      - name: agent 이미지 빌드 (로컬 로드 + 푸시)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./agent
+          file: ./agent/Dockerfile
+          platforms: linux/arm64
+          push: true
+          load: false
+          tags: |
+            ${{ env.ECR_REGISTRY }}/waganda-agent:${{ env.IMAGE_TAG }}
+            ${{ env.ECR_REGISTRY }}/waganda-agent:latest
+          cache-from: type=gha,scope=agent
+          cache-to: type=gha,mode=max,scope=agent
+
+      - name: 이미지 참조 출력
+        id: set-ref
+        run: echo "image_ref=${{ env.ECR_REGISTRY }}/waganda-agent:${{ env.IMAGE_TAG }}" >> "$GITHUB_OUTPUT"
+
+  check-agent-image-size:
+    name: 에이전트 이미지 크기 검사 (2GB 상한)
+    runs-on: ubuntu-latest
+    needs: [build-agent]
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+
+      - name: AWS 자격증명 설정 (OIDC role assume)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: ECR 로그인
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # push 단계에서 로컬에 이미지를 남기지 않았으므로 검사를 위해 pull 한다.
+      - name: 에이전트 이미지 pull
+        run: docker pull "${{ needs.build-agent.outputs.image-ref }}"
+
+      - name: 이미지 크기 검사 실행
+        run: |
+          bash scripts/check-agent-image-size.sh \
+            "${{ needs.build-agent.outputs.image-ref }}" \
+            "${{ env.AGENT_IMAGE_WARN_BYTES }}" \
+            "${{ env.AGENT_IMAGE_FAIL_BYTES }}"
+
+  build-audio:
+    name: Build & Push — audio (Python Lambda, ARM64)
+    runs-on: ubuntu-latest
+    needs: [ci]
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+
+      - name: audio/Dockerfile 존재 확인
+        id: check
+        run: |
+          if [ -f "audio/Dockerfile" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: AWS 자격증명 설정 (OIDC role assume)
+        if: steps.check.outputs.exists == 'true'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: ECR 로그인
+        if: steps.check.outputs.exists == 'true'
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: QEMU 설정 (ARM64 크로스 빌드)
+        if: steps.check.outputs.exists == 'true'
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Docker Buildx 설정
+        if: steps.check.outputs.exists == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: audio 이미지 빌드 및 푸시
+        if: steps.check.outputs.exists == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./audio
+          file: ./audio/Dockerfile
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ env.ECR_REGISTRY }}/waganda-audio:${{ env.IMAGE_TAG }}
+            ${{ env.ECR_REGISTRY }}/waganda-audio:latest
+          cache-from: type=gha,scope=audio
+          cache-to: type=gha,mode=max,scope=audio
+
+      - name: audio/Dockerfile 없음 — 중단
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          echo "audio/Dockerfile 이 아직 없습니다 (작업 8 미착수). audio 이미지 배포를 건너뜁니다."
+
+  deploy-dev:
+    name: cdk deploy (dev)
+    runs-on: ubuntu-latest
+    needs: [build-web, check-agent-image-size, build-audio]
+    environment: dev
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Node.js 설정
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: 의존성 설치
+        run: npm ci
+
+      - name: AWS 자격증명 설정 (OIDC role assume)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: cdk deploy --all (dev)
+        working-directory: infrastructure
+        run: npx cdk deploy --all --require-approval never --context env=dev
+        env:
+          WAGANDA_IMAGE_TAG: ${{ env.IMAGE_TAG }}
+
+  smoke-test:
+    name: 스모크 테스트 (dev)
+    runs-on: ubuntu-latest
+    needs: [deploy-dev]
+    environment: dev
+    permissions:
+      contents: read
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+
+      - name: 스모크 테스트 실행
+        env:
+          BASE_URL: ${{ vars.DEV_BASE_URL }}
+          AGENT_PING_URL: ${{ vars.DEV_AGENT_PING_URL }}
+        run: bash scripts/smoke-test.sh
+
+  deploy-prod:
+    name: cdk deploy (prod)
+    runs-on: ubuntu-latest
+    needs: [smoke-test]
+    environment: prod
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Node.js 설정
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: 의존성 설치
+        run: npm ci
+
+      - name: AWS 자격증명 설정 (OIDC role assume)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: cdk deploy --all (prod)
+        working-directory: infrastructure
+        run: npx cdk deploy --all --require-approval never --context env=prod
+        env:
+          WAGANDA_IMAGE_TAG: ${{ env.IMAGE_TAG }}
