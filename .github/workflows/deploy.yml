@@ -386,13 +386,16 @@ jobs:
             --cache-control "public,max-age=31536000,immutable" --delete --only-show-errors
           echo "동기화 완료: ${COUNT} 개 파일"
 
-      # 공개 페이지는 기본 7일 캐시라 새 배포 후에도 예전 HTML 이 남는다.
-      # 정적 자산은 해시 파일명이라 무효화가 필요 없지만 HTML 은 필요하다.
+      # 공개 페이지는 기본 7일 캐시이고, 파비콘 같은 메타데이터 라우트에는 Next.js 가
+      # `max-age=31536000, immutable` 을 붙인다. 경로를 나열하면 이런 자산이 누락되어
+      # 구 버전이 계속 서빙된다(실제로 파비콘이 갱신되지 않았다).
+      # 해시 파일명을 쓰는 `/_next/static/*` 는 무효화가 필요 없지만, 전체 무효화도
+      # 경로 1건으로 계산되므로(월 1,000건 무료) 범위를 좁히지 않는다.
       - name: CloudFront 캐시 무효화
         run: |
           aws cloudfront create-invalidation \
             --distribution-id "${{ vars.PROD_CF_DISTRIBUTION_ID }}" \
-            --paths "/" "/wines*" "/tastings*" "/discoveries*" "/rankings*" "/timeline*" "/explore*" \
+            --paths "/*" \
             --query 'Invalidation.[Id,Status]' --output text
 
   smoke-test:
