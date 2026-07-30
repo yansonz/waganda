@@ -16,6 +16,20 @@ npm run analyze:local -- <tastingId>   # 분석 파이프라인 수동 실행
 환경변수는 `.env.local` (gitignored). 필요한 키 목록은 `.env.example` 이 원본이니
 새 변수를 읽는 코드를 추가하면 `.env.example` 에도 빈 값으로 추가한다.
 
+## AWS 프로필은 `waganda` 하나만 쓴다
+
+이 프로젝트의 모든 AWS 리소스(스택·SSM 시크릿·ECR·Bedrock 추론 프로파일)는 **단일 계정**에만
+존재한다. 다른 프로필(`default` 등)로 조회하거나 쓰면 안 된다. 예외를 두지 않는다.
+
+다른 계정에 시크릿을 넣으면 배포된 Lambda·AgentCore 가 읽지 못하고, 증상은 조용한 인증 실패로만
+드러난다. 실제로 Google OAuth 자격정보가 다른 계정에 등록돼 있어 로그인이 되지 않았다.
+
+- `infrastructure/scripts/put-secrets.sh` 는 프로필을 `waganda` 로 고정한다(`--profile` 옵션 없음).
+  셸의 `AWS_PROFILE` 이 무엇이든 대상 계정은 바뀌지 않고, 실행 시 대상 계정을 출력한다.
+- CDK 배포는 `npm run deploy` / `npm run diff` (둘 다 `--profile waganda`)를 쓴다.
+  CI 는 OIDC 로 역할을 맡으므로 프로필을 쓰지 않는다.
+- 계정 ID 는 커밋하지 않는다. 프로필 이름으로만 고정한다.
+
 ## 실제 AWS 를 호출한다 — 비용 주의
 
 로컬은 DB·S3 만 에뮬레이터이고 **Bedrock 과 Transcribe 는 실제 계정을 호출한다.**

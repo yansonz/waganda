@@ -6,6 +6,8 @@
   "scripts": {
     "cdk": "cdk",
     "synth": "cdk synth --all",
+    "deploy": "cdk deploy --all --profile waganda --context env=prod --require-approval never",
+    "diff": "cdk diff --all --profile waganda --context env=prod",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
