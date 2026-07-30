@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { cookies } from 'next/headers';
-import { getAuthConfig, googleRedirectUri } from '@/lib/config';
+import { getAuthConfig, googleRedirectUri, absoluteUrl } from '@/lib/config';
 import {
   COOKIE_NAME,
   OAUTH_STATE_COOKIE_NAME,
@@ -72,7 +72,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   if (!queryState || !savedState || queryState !== savedState) {
     console.warn('[auth] OAuth state 불일치 — 세션을 발급하지 않습니다.');
     await clearOauthFlowCookies();
-    return NextResponse.redirect(new URL(LOGIN_FAILURE_REDIRECT, request.nextUrl.origin), {
+    return NextResponse.redirect(absoluteUrl(LOGIN_FAILURE_REDIRECT), {
       status: 302,
     });
   }
@@ -81,7 +81,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   if (!code) {
     console.warn('[auth] OAuth 콜백에 code 가 없습니다 — 세션을 발급하지 않습니다.');
-    return NextResponse.redirect(new URL(LOGIN_FAILURE_REDIRECT, request.nextUrl.origin), {
+    return NextResponse.redirect(absoluteUrl(LOGIN_FAILURE_REDIRECT), {
       status: 302,
     });
   }
@@ -103,7 +103,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     if (!tokenResponse.ok) {
       console.warn(`[auth] Google 토큰 교환 실패 — status=${tokenResponse.status}`);
-      return NextResponse.redirect(new URL(LOGIN_FAILURE_REDIRECT, request.nextUrl.origin), {
+      return NextResponse.redirect(absoluteUrl(LOGIN_FAILURE_REDIRECT), {
         status: 302,
       });
     }
@@ -111,7 +111,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     tokenData = (await tokenResponse.json()) as GoogleTokenResponse;
   } catch (error) {
     console.warn('[auth] Google 토큰 교환 중 네트워크 오류', error);
-    return NextResponse.redirect(new URL(LOGIN_FAILURE_REDIRECT, request.nextUrl.origin), {
+    return NextResponse.redirect(absoluteUrl(LOGIN_FAILURE_REDIRECT), {
       status: 302,
     });
   }
@@ -125,7 +125,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     if (!userInfoResponse.ok) {
       console.warn(`[auth] Google userinfo 조회 실패 — status=${userInfoResponse.status}`);
-      return NextResponse.redirect(new URL(LOGIN_FAILURE_REDIRECT, request.nextUrl.origin), {
+      return NextResponse.redirect(absoluteUrl(LOGIN_FAILURE_REDIRECT), {
         status: 302,
       });
     }
@@ -133,7 +133,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     userInfo = (await userInfoResponse.json()) as GoogleUserInfoResponse;
   } catch (error) {
     console.warn('[auth] Google userinfo 조회 중 네트워크 오류', error);
-    return NextResponse.redirect(new URL(LOGIN_FAILURE_REDIRECT, request.nextUrl.origin), {
+    return NextResponse.redirect(absoluteUrl(LOGIN_FAILURE_REDIRECT), {
       status: 302,
     });
   }
@@ -144,21 +144,21 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   if (!email) {
     console.warn('[auth] Google userinfo 에 이메일이 없습니다 — 세션을 발급하지 않습니다.');
-    return NextResponse.redirect(new URL(LOGIN_FAILURE_REDIRECT, request.nextUrl.origin), {
+    return NextResponse.redirect(absoluteUrl(LOGIN_FAILURE_REDIRECT), {
       status: 302,
     });
   }
 
   if (verifiedEmail !== true) {
     console.warn(`[auth] 미인증 이메일 로그인 시도 거부: ${maskEmail(email)}`);
-    return NextResponse.redirect(new URL(LOGIN_FAILURE_REDIRECT, request.nextUrl.origin), {
+    return NextResponse.redirect(absoluteUrl(LOGIN_FAILURE_REDIRECT), {
       status: 302,
     });
   }
 
   if (!isAllowedEmail(email, config.allowlist)) {
     console.warn(`[auth] 허용 목록 외 이메일 로그인 시도 거부: ${maskEmail(email)}`);
-    return NextResponse.redirect(new URL(LOGIN_FAILURE_REDIRECT, request.nextUrl.origin), {
+    return NextResponse.redirect(absoluteUrl(LOGIN_FAILURE_REDIRECT), {
       status: 302,
     });
   }
@@ -170,7 +170,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // 쿠키는 **응답 객체에 직접** 실어야 한다.
   // Route Handler 에서 `cookies().set()` 후 별도로 만든 리다이렉트 응답을 반환하면
   // Set-Cookie 가 누락될 수 있고, 그러면 로그인해도 세션이 남지 않아 매번 재인증하게 된다.
-  const response = NextResponse.redirect(new URL(returnTo, request.nextUrl.origin), {
+  const response = NextResponse.redirect(absoluteUrl(returnTo), {
     status: 302,
   });
   response.cookies.set(COOKIE_NAME, token, cookieOptions);

@@ -102,6 +102,11 @@ inclusion: always
 ## 인증
 
 - 세션 쿠키는 리다이렉트 응답 객체에 직접 설정해야 실린다.
+- **리다이렉트 대상을 `request.nextUrl.origin` 으로 만들지 않는다.** CloudFront 오리진 요청
+  정책이 `host` 를 제외하므로(OAC 서명 충돌 방지) Next.js 가 원래 호스트를 알 수 없고
+  컨테이너 내부 주소(`https://0.0.0.0:3000`)를 origin 으로 계산한다. 실제로 Google 로그인 후
+  그 주소로 튕겼다(쿠키는 정상 발급되어 되돌아가면 로그인된 상태였다).
+  `lib/config.ts` 의 `absoluteUrl()` 로 `APP_BASE_URL` 기준 절대 URL 을 만든다.
 - `secure` 를 하드코딩하지 않는다. `APP_BASE_URL` 이 http 면 Secure 를 빼야 로컬에서 붙는다.
 
 ## 스키마

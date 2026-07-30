@@ -216,6 +216,22 @@ export function googleRedirectUri(baseUrl?: string): string {
 }
 
 /**
+ * 앱 내부 경로를 **절대 URL** 로 만든다 (리다이렉트 응답용).
+ *
+ * `request.nextUrl.origin` 을 쓰면 안 된다. 이 서비스는 CloudFront → Lambda Function URL
+ * 구조이고, OAC 서명과 충돌하지 않도록 오리진 요청 정책에서 `host` 헤더를 제외한다.
+ * 그러면 Next.js 가 원래 호스트를 알 수 없어 컨테이너의 내부 바인딩 주소
+ * (`https://0.0.0.0:3000`)를 origin 으로 계산한다 — 실제로 로그인 후 그 주소로
+ * 리다이렉트되는 문제가 있었다.
+ *
+ * 그래서 리다이렉트 대상은 항상 설정값(`APP_BASE_URL`)을 기준으로 만든다.
+ */
+export function absoluteUrl(path: string): string {
+  const base = getRuntimeConfig().appBaseUrl.replace(/\/$/, '');
+  return path.startsWith('/') ? `${base}${path}` : `${base}/${path}`;
+}
+
+/**
  * 메타데이터(robots.txt·sitemap·OG)용 베이스 URL.
  *
  * 빌드 시점(정적 생성)에도 평가되므로 **필수 설정을 요구하지 않는다.**
