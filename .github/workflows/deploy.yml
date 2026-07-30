@@ -247,13 +247,39 @@ jobs:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
+      # 컨텍스트 값이 비면 CDK 가 해당 설정을 **제거한 상태로** 배포한다.
+      # 도메인 별칭·Route53 레코드가 사라지고 Lambda·AgentCore 환경변수가 비어
+      # 서비스가 조용히 망가지므로, 하나라도 없으면 배포하지 않고 실패시킨다.
+      - name: 배포 컨텍스트 변수 확인 (누락 시 중단)
+        env:
+          PROD_HOSTED_ZONE_ID: ${{ vars.PROD_HOSTED_ZONE_ID }}
+          PROD_CERTIFICATE_ARN: ${{ vars.PROD_CERTIFICATE_ARN }}
+          PROD_CF_DISTRIBUTION_ID: ${{ vars.PROD_CF_DISTRIBUTION_ID }}
+          PROD_AGENT_RUNTIME_ARN: ${{ vars.PROD_AGENT_RUNTIME_ARN }}
+          PROD_BEDROCK_PROFILE_ARN: ${{ vars.PROD_BEDROCK_PROFILE_ARN }}
+        run: |
+          missing=""
+          for name in PROD_HOSTED_ZONE_ID PROD_CERTIFICATE_ARN PROD_CF_DISTRIBUTION_ID \
+                      PROD_AGENT_RUNTIME_ARN PROD_BEDROCK_PROFILE_ARN; do
+            if [ -z "${!name}" ]; then missing="$missing $name"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::배포 컨텍스트 변수가 비어 있습니다:$missing"
+            echo "Settings > Secrets and variables > Actions > Variables 에 등록하세요."
+            exit 1
+          fi
+          echo "배포 컨텍스트 변수 5개 확인 완료"
+
       - name: cdk deploy --all (prod)
         working-directory: infrastructure
         run: |
           npx cdk deploy --all --require-approval never \
             --context env=prod \
             --context hostedZoneId="${{ vars.PROD_HOSTED_ZONE_ID }}" \
-            --context certificateArn="${{ vars.PROD_CERTIFICATE_ARN }}"
+            --context certificateArn="${{ vars.PROD_CERTIFICATE_ARN }}" \
+            --context cloudFrontDistributionId="${{ vars.PROD_CF_DISTRIBUTION_ID }}" \
+            --context agentRuntimeArn="${{ vars.PROD_AGENT_RUNTIME_ARN }}" \
+            --context bedrockModelProfileArn="${{ vars.PROD_BEDROCK_PROFILE_ARN }}"
         env:
           WAGANDA_IMAGE_TAG: ${{ env.IMAGE_TAG }}
 
