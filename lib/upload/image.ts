@@ -11,6 +11,8 @@
  * 디코딩이 안 되면 변환 실패를 명확히 알려 사용자가 JPEG 로 다시 올리게 한다.
  */
 
+import { signedFetch } from '@/lib/http/signedFetch';
+
 /** 라벨 인식에 충분한 긴 변 최대 길이(px) */
 export const MAX_IMAGE_EDGE = 2000;
 
@@ -78,7 +80,9 @@ export type HeicConverter = (file: File) => Promise<PrepareImageResult>;
 /** 기본 구현 — 서버의 변환 엔드포인트를 호출한다 */
 async function defaultHeicConverter(file: File): Promise<PrepareImageResult> {
   try {
-    const response = await fetch('/api/labels/convert', {
+    // 파일을 본문으로 그대로 보낸다 — CloudFront OAC 가 본문을 서명하지 않으므로
+    // 본문 해시 헤더가 필요하다(`lib/http/signedFetch.ts`).
+    const response = await signedFetch('/api/labels/convert', {
       method: 'POST',
       headers: { 'Content-Type': file.type || 'image/heic' },
       body: file,

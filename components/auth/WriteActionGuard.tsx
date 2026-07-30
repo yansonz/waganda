@@ -10,6 +10,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { signedFetch } from '@/lib/http/signedFetch';
 
 /**
  * 쓰기 액션 가드.
@@ -141,7 +142,9 @@ export function useWriteAction({ formId }: UseWriteActionOptions): UseWriteActio
 
   const runWriteAction = useCallback(
     async (input: RequestInfo | URL, init?: RequestInit, draft?: unknown): Promise<Response> => {
-      const response = await fetch(input, init);
+      // CloudFront OAC 는 본문을 서명에 포함하지 않는다. 본문 해시 헤더가 없으면
+      // Lambda Function URL 이 서명 불일치로 거부한다(`lib/http/signedFetch.ts`).
+      const response = await signedFetch(input, init);
 
       if (response.status === 401) {
         let body: unknown = null;

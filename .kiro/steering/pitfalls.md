@@ -26,6 +26,24 @@ inclusion: always
   크로스 스택 버킷 정책은 소유 스택에서 계정 범위 조건으로 부여한다.
 - CloudFront 오리진에 플레이스홀더 도메인을 남기지 않는다.
 
+## CloudFront + Lambda Function URL (OAC)
+
+- **OAC 는 요청 본문을 서명하지 않는다.** Lambda Function URL 은 unsigned payload 를 거부하므로
+  POST·PUT·PATCH 는 클라이언트가 본문 SHA-256 을 `x-amz-content-sha256` 헤더로 보내야 한다.
+  없으면 앱에 도달하기도 전에 `The request signature we calculated does not match...` 로 거부된다.
+  브라우저 쓰기 요청은 `lib/http/signedFetch.ts` 를 쓴다(`runWriteAction` 이 이미 경유한다).
+  **S3 사전 서명 URL 로 직접 올리는 PUT 에는 이 헤더를 붙이지 않는다** — CloudFront 를 거치지 않는다.
+- Function URL 은 2025-10 이후 `lambda:InvokeFunctionUrl` **과** `lambda:InvokeFunction` 을 모두
+  요구한다. CDK 의 `withOriginAccessControl` 은 앞쪽만 부여하므로 나머지를 직접 추가해야 한다.
+- 오리진 요청 정책으로 `ALL_VIEWER_EXCEPT_HOST_HEADER` 를 쓰지 않는다. Authorization 을 전달해
+  OAC 서명과 충돌한다. host·authorization 을 제외한 커스텀 정책을 쓴다.
+- 컨테이너 Lambda 로 Next.js 를 돌리려면 **Lambda Web Adapter** 가 필요하다. 없으면 서버가
+  포트에 뜨기만 하고 런타임 API 에 응답하지 않아 init/invoke 가 타임아웃한다.
+- 이미지 태그를 `latest` 로 고정하면 새 이미지를 푸시해도 CloudFormation 이 변경을 감지하지 못해
+  Lambda 가 예전 이미지를 계속 쓴다. `WAGANDA_IMAGE_TAG` 를 넘긴다.
+- Docker Desktop 이 OCI manifest 로 푸시하면 Lambda 가 이미지를 거부한다.
+  `--provenance=false --sbom=false`, `oci-mediatypes=false` 로 푸시한다.
+
 ## Next.js
 
 - 미들웨어에서 AWS SDK·`node:crypto` 를 쓰려면 `experimental.nodeMiddleware` 가 필요하다
