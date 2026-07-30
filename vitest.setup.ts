@@ -23,16 +23,36 @@ delete process.env.WAGANDA_AGENT_RUNTIME_ARN;
 delete process.env.WAGANDA_LABEL_FALLBACK;
 delete process.env.WAGANDA_LOCAL_PIPELINE;
 delete process.env.WAGANDA_TRANSCRIBE_BUCKET;
+/*
+ * 로컬 개발 설정도 지운다 — 남아 있으면 테스트가 에뮬레이터·실제 모델을 향하거나
+ * 기본값 검증이 어긋난다.
+ */
+delete process.env.WAGANDA_DDB_ENDPOINT;
+delete process.env.WAGANDA_S3_ENDPOINT;
+delete process.env.WAGANDA_BEDROCK_MODEL_ID;
+delete process.env.WAGANDA_SSM_PREFIX;
+delete process.env.WAGANDA_CF_DISTRIBUTION_ID;
+delete process.env.EDITOR_SESSION_TTL_SEC;
+delete process.env.WAGANDA_DAILY_AGENT_RUN_LIMIT;
+delete process.env.WAGANDA_MONTHLY_MODEL_BUDGET_USD;
 
-process.env.WAGANDA_ENV ??= 'test';
-process.env.WAGANDA_TABLE_NAME ??= 'waganda-test';
-process.env.WAGANDA_MEDIA_BUCKET ??= 'waganda-media-test';
-process.env.AWS_REGION ??= 'ap-northeast-2';
-process.env.GOOGLE_CLIENT_ID ??= 'test-client-id';
-process.env.GOOGLE_CLIENT_SECRET ??= 'test-client-secret';
-process.env.EDITOR_JWT_SECRET ??= 'test-jwt-secret-must-be-at-least-32-bytes-long!!';
-process.env.EDITOR_ALLOWLIST ??= 'yan@example.com,robert@example.com';
-process.env.APP_BASE_URL ??= 'https://waganda.test';
+/*
+ * 테스트 기본 설정은 **덮어쓴다**(`??=` 아님).
+ *
+ * `??=` 로 두면 `.env.local` 을 읽은 셸에서 실행할 때 개발자의 실제 값이 우선해
+ * 로컬에서만 실패하는 테스트가 된다. 실제로 `APP_BASE_URL=http://localhost:3000`,
+ * 실제 편집자 이메일이 담긴 `EDITOR_ALLOWLIST` 가 스며들어 66건이 깨졌다.
+ * 테스트는 실행 환경과 무관하게 같은 결과를 내야 한다.
+ */
+process.env.WAGANDA_ENV = 'test';
+process.env.WAGANDA_TABLE_NAME = 'waganda-test';
+process.env.WAGANDA_MEDIA_BUCKET = 'waganda-media-test';
+process.env.AWS_REGION = 'ap-northeast-2';
+process.env.GOOGLE_CLIENT_ID = 'test-client-id';
+process.env.GOOGLE_CLIENT_SECRET = 'test-client-secret';
+process.env.EDITOR_JWT_SECRET = 'test-jwt-secret-must-be-at-least-32-bytes-long!!';
+process.env.EDITOR_ALLOWLIST = 'yan@example.com,robert@example.com';
+process.env.APP_BASE_URL = 'https://waganda.test';
 
 // jsdom 에 없는 브라우저 API 보강
 if (!globalThis.crypto?.randomUUID) {
