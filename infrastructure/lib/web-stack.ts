@@ -81,6 +81,9 @@ export class WagandaWebStack extends Stack {
     // 이미지는 CI 가 ECR 에 푸시한다. 이름 기반 임포트로 크로스 스택 참조를 만들지 않는다.
     const webRepo = ecr.Repository.fromRepositoryName(this, 'WebRepoRef', names.ecr.web);
 
+    // CI 는 커밋 SHA 를 태그로 넘긴다. 로컬 배포는 `latest` 로 떨어진다.
+    const imageTag = process.env.WAGANDA_IMAGE_TAG || 'latest';
+
     // NextJS Lambda IAM Role — 최소 권한 (lib/config.ts, lib/db/**, lib/upload/** 기반)
     // 권한: DynamoDB 읽기/쓰기, S3 미디어 읽기/쓰기, SSM 파라미터 읽기, KMS 복호화,
     //      CloudFront 무효화, AgentCore 호출
@@ -185,7 +188,9 @@ export class WagandaWebStack extends Stack {
 
     const nextjsLambda = new lambda.DockerImageFunction(this, 'NextjsLambda', {
       functionName: `waganda-web-${envConfig.resourceSuffix}`,
-      code: lambda.DockerImageCode.fromEcr(webRepo, { tagOrDigest: 'latest' }),
+      // 이미지 태그를 고정 `latest` 로 두면 새 이미지를 푸시해도 CloudFormation 이 변경을
+      // 감지하지 못해 Lambda 가 예전 이미지를 계속 쓴다. CI 는 커밋 SHA 를 태그로 넘긴다.
+      code: lambda.DockerImageCode.fromEcr(webRepo, { tagOrDigest: imageTag }),
       architecture: lambda.Architecture.ARM_64,
       memorySize: 1024,
       timeout: Duration.seconds(30),

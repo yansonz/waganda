@@ -85,9 +85,10 @@ export class WagandaPipelineStack extends Stack {
     );
 
     // 오디오 Lambda (컨테이너, ARM64)
+    // 이미지 태그는 AgentCore Runtime 과 같은 값을 쓴다(아래 imageTag 참조).
     const audioLambda = new lambda.DockerImageFunction(this, 'AudioProcessorLambda', {
       code: lambda.DockerImageCode.fromEcr(dataStack.audioEcrRepo, {
-        tagOrDigest: 'latest',
+        tagOrDigest: process.env.WAGANDA_IMAGE_TAG || 'latest',
       }),
       architecture: lambda.Architecture.ARM_64,
       memorySize: 1024,

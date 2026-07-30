@@ -283,6 +283,31 @@ jobs:
         env:
           WAGANDA_IMAGE_TAG: ${{ env.IMAGE_TAG }}
 
+      # `/_next/static/*` 는 S3 오리진에서 서빙된다. 이 단계를 빼면 새 빌드의 청크가 404 가 되어
+      # 페이지가 스타일·스크립트 없이 렌더된다(CDK 는 BucketDeployment 를 쓰지 않는다).
+      # 산출물은 방금 푸시한 web 이미지에서 꺼낸다 — 런너에서 다시 빌드하지 않는다.
+      - name: 정적 자산 추출 및 S3 동기화
+        run: |
+          set -euo pipefail
+          IMAGE="${{ env.ECR_REGISTRY }}/waganda-web:${{ env.IMAGE_TAG }}"
+          docker pull "$IMAGE"
+          CID=$(docker create "$IMAGE")
+          rm -rf ./static-out && mkdir -p ./static-out
+          docker cp "$CID:/app/.next-prod/static" ./static-out/static
+          docker rm "$CID"
+          aws s3 sync ./static-out/static "s3://waganda-static-prod/_next/static/" \
+            --cache-control "public,max-age=31536000,immutable" --delete --only-show-errors
+          echo "동기화 완료: $(find ./static-out/static -type f | wc -l) 개 파일"
+
+      # 공개 페이지는 기본 7일 캐시라 새 배포 후에도 예전 HTML 이 남는다.
+      # 정적 자산은 해시 파일명이라 무효화가 필요 없지만 HTML 은 필요하다.
+      - name: CloudFront 캐시 무효화
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ vars.PROD_CF_DISTRIBUTION_ID }}" \
+            --paths "/" "/wines*" "/tastings*" "/discoveries*" "/rankings*" "/timeline*" "/explore*" \
+            --query 'Invalidation.[Id,Status]' --output text
+
   smoke-test:
     name: 스모크 테스트 (prod)
     runs-on: ubuntu-latest
