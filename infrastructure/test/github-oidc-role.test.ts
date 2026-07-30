@@ -43,15 +43,31 @@ describe('GitHub Actions OIDC 배포 역할', () => {
               },
               // 저장소·브랜치가 모두 박혀 있어야 한다.
               // `repo:*` 나 `ref:refs/pull/*` 로 넓히면 포크 PR 이 자격증명을 얻는다.
+              //
+              // GitHub 이 실제로 발급하는 sub 는 불변 ID 형식
+              // (`repo:<owner>@<ownerId>/<repo>@<repoId>`)이다. 이름 형식만 걸면
+              // AccessDenied 가 되므로 두 형식을 함께 허용한다.
               StringLike: {
-                'token.actions.githubusercontent.com:sub':
+                'token.actions.githubusercontent.com:sub': [
+                  'repo:yansonz@18474271/waganda@1315949219:ref:refs/heads/main',
                   'repo:yansonz/waganda:ref:refs/heads/main',
+                ],
               },
             },
           }),
         ]),
       }),
     });
+  });
+
+  it('신뢰 조건이 main 브랜치 외의 ref 를 허용하지 않는다', () => {
+    // 조건 문자열에 PR·태그·와일드카드 ref 가 섞이면 포크 PR 이 프로덕션 계정을 만질 수 있다.
+    const roles = JSON.stringify(template.findResources('AWS::IAM::Role'));
+
+    expect(roles).not.toContain('ref:refs/pull/');
+    expect(roles).not.toContain('ref:refs/tags/');
+    expect(roles).not.toContain('ref:*');
+    expect(roles).not.toContain('repo:*');
   });
 
   it('역할에 직접적인 배포 권한을 주지 않고 CDK 부트스트랩 역할 assume 만 허용한다', () => {

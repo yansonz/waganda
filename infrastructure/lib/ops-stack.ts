@@ -20,6 +20,20 @@ import { EnvironmentConfig, resourceNames } from './env';
  */
 const GITHUB_REPOSITORY = 'yansonz/waganda';
 
+/**
+ * GitHub OIDC 토큰의 `sub` 클레임에 쓰이는 **불변 ID 형식** 저장소 식별자.
+ *
+ * GitHub 은 `repo:<owner>@<ownerId>/<repo>@<repoId>` 형태로 sub 를 발급한다.
+ * 이름만으로 조건을 걸면(`repo:yansonz/waganda`) 실제 토큰과 일치하지 않아
+ * `AccessDenied: Not authorized to perform sts:AssumeRoleWithWebIdentity` 로 거부된다
+ * (CloudTrail 의 userName 에서 실제 sub 를 확인해 알아냈다).
+ *
+ * ID 는 GitHub 이 부여하며 저장소 이름을 바꿔도 변하지 않는다. 이름 기반 조건보다
+ * **안전하다** — 저장소를 삭제하고 같은 이름으로 다시 만들어도 ID 가 달라 매칭되지 않는다.
+ * 값은 `GET /repos/yansonz/waganda` 의 `owner.id`·`id` 다.
+ */
+const GITHUB_REPOSITORY_WITH_IDS = 'yansonz@18474271/waganda@1315949219';
+
 export interface OpsStackProps extends StackProps {
   envConfig: EnvironmentConfig;
 }
@@ -145,8 +159,15 @@ export class WagandaOpsStack extends Stack {
           },
           // 저장소와 브랜치를 못박는다. PR 이나 다른 저장소의 워크플로는 맡을 수 없다.
           // `ref:refs/heads/main` 만 허용하므로 포크 PR 로는 자격증명을 얻지 못한다.
+          //
+          // 두 형식을 함께 허용한다 — GitHub 이 발급하는 실제 sub 는 불변 ID 형식이고,
+          // 이름 형식은 향후 GitHub 이 형식을 되돌릴 경우를 대비한 것이다.
+          // 배열은 OR 로 평가되며 둘 다 저장소·브랜치가 고정돼 있어 경계가 느슨해지지 않는다.
           StringLike: {
-            'token.actions.githubusercontent.com:sub': `repo:${GITHUB_REPOSITORY}:ref:refs/heads/main`,
+            'token.actions.githubusercontent.com:sub': [
+              `repo:${GITHUB_REPOSITORY_WITH_IDS}:ref:refs/heads/main`,
+              `repo:${GITHUB_REPOSITORY}:ref:refs/heads/main`,
+            ],
           },
         },
         'sts:AssumeRoleWithWebIdentity',
