@@ -1,0 +1,22 @@
+{
+  "name": "@waganda/schemas",
+  "version": "0.1.0",
+  "private": true,
+  "description": "app ↔ agent 공유 Zod 스키마 (단일 원본)",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}
