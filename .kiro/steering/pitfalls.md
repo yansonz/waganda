@@ -44,6 +44,29 @@ inclusion: always
 - Docker Desktop 이 OCI manifest 로 푸시하면 Lambda 가 이미지를 거부한다.
   `--provenance=false --sbom=false`, `oci-mediatypes=false` 로 푸시한다.
 
+## GitHub Actions 배포 (OIDC + ARM64)
+
+- **OIDC 신뢰 정책의 `sub` 는 두 형태를 모두 허용해야 한다.** GitHub 은 불변 ID 형식
+  (`repo:<owner>@<ownerId>/<repo>@<repoId>`)으로 발급하고, 잡에 `environment:` 가 지정되면
+  `ref:refs/heads/<branch>` 대신 `environment:<name>` 이 된다. 하나만 넣으면 그 잡만
+  AccessDenied 가 된다(이미지 빌드는 통과하고 배포만 실패했다).
+  실제 sub 는 저장소 로그가 아니라 **CloudTrail 의 `userIdentity.userName`** 에서 확인한다.
+- **`docker/build-push-action` 은 기본으로 provenance attestation 을 붙여
+  `application/vnd.oci.image.index.v1+json` 으로 푸시한다.** Lambda·AgentCore 는 이 형식을
+  거부하므로 `provenance: false`, `sbom: false`, `outputs: type=image,oci-mediatypes=false,push=true`
+  가 필요하다. `latest` 가 이 형식으로 덮어써지면 스택 배포가 롤백된다.
+- 이미지 빌드는 `ubuntu-24.04-arm` 네이티브 러너에서 한다(공개 저장소는 무료).
+  QEMU 크로스 빌드는 매우 느리고, amd64 러너에서 arm64 이미지를 `docker pull`·`create` 하면
+  `no matching manifest for linux/amd64` 가 난다. 정적 자산 추출도 arm64 잡에서 하고
+  아티팩트로 배포 잡에 넘긴다.
+- `concurrency.cancel-in-progress` 를 워크플로 전체에 `false` 로 두지 않는다. 실패가 확정된
+  낡은 실행이 큐를 막는다. 취소를 막아야 하는 것은 `cdk deploy` 잡뿐이므로 그 잡에만
+  별도 concurrency group 을 준다.
+- 배포 컨텍스트(hostedZoneId·certificateArn·distributionId·agentRuntimeArn·모델 프로파일 ARN)를
+  하나라도 빼고 `cdk deploy` 하면 **해당 설정이 제거된 상태로 배포된다.** 도메인 별칭과
+  Route53 레코드가 사라지고 Lambda 환경변수가 빈다. 로컬은 gitignored `cdk.context.json`,
+  CI 는 GitHub Variables 로 채우고 누락 시 배포 전에 실패시킨다.
+
 ## Next.js
 
 - 미들웨어에서 AWS SDK·`node:crypto` 를 쓰려면 `experimental.nodeMiddleware` 가 필요하다
