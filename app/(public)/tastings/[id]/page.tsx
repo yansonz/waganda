@@ -15,6 +15,7 @@ import { TastingEditControls } from '@/components/tasting/TastingEditControls';
 import { FitBadge } from '@/components/wine/FitBadge';
 import { WineInfoCard } from '@/components/wine/WineInfoCard';
 import { EmptyState } from '@/components/common/EmptyState';
+import { SERVICE_TIME_ZONE } from '@/lib/domain/types';
 
 /**
  * app/(public)/tastings/[id]/page.tsx — 시음 상세 화면 (14.2, R9).
@@ -93,7 +94,7 @@ export default async function TastingDetailPage({ params }: PageProps): Promise<
           </h1>
           <p className="text-muted text-sm">
             <time dateTime={tasting.tastedAt}>
-              {new Date(tasting.tastedAt).toLocaleString('ko-KR')}
+              {new Date(tasting.tastedAt).toLocaleString('ko-KR', { timeZone: SERVICE_TIME_ZONE })}
             </time>
             {winery && <span className="ml-2">· {winery.name}</span>}
             {regionPath.length > 0 && <span className="ml-2">· {regionPath.join(' > ')}</span>}

@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import type { RatingTrendPoint } from '@/lib/views/read';
+import { SERVICE_TIME_ZONE } from '@/lib/domain/types';
 
 /**
  * components/wine/RatingTrend.tsx — 와인 상세 평점 추이 선 차트 (순수 SVG, 14.4).
@@ -75,7 +76,7 @@ export function RatingTrend({ points, width = 480, height = 160 }: RatingTrendPr
         {points
           .map(
             (p) =>
-              `${new Date(p.tastedAt).toLocaleDateString('ko-KR')} ${p.rating}점 (${
+              `${new Date(p.tastedAt).toLocaleDateString('ko-KR', { timeZone: SERVICE_TIME_ZONE })} ${p.rating}점 (${
                 p.ratingSource === 'manual' ? '수동' : 'AI'
               } 평점)`,
           )

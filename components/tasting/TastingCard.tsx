@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { ReactElement } from 'react';
 import { Rating } from '@/components/common/Rating';
 import type { TastingSummaryView } from '@/lib/views/read';
+import { SERVICE_TIME_ZONE } from '@/lib/domain/types';
 
 /**
  * components/tasting/TastingCard.tsx — 시음 요약 카드 (대시보드·타임라인·와인 상세 공용).
@@ -12,6 +13,7 @@ interface TastingCardProps {
 
 export function TastingCard({ tasting }: TastingCardProps): ReactElement {
   const dateLabel = new Date(tasting.tastedAt).toLocaleDateString('ko-KR', {
+    timeZone: SERVICE_TIME_ZONE,
     year: 'numeric',
     month: 'long',
     day: 'numeric',

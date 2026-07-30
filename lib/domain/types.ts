@@ -74,24 +74,88 @@ export interface StatsInputTasting {
 export type HourBucketLabel = 'dawn' | 'morning' | 'afternoon' | 'evening' | 'night';
 
 /**
- * `tastedAt`(ISO 8601, 로컬 시각 오프셋 포함)에서 요일(0~6, 일요일=0)을 계산한다.
- * 순수 함수 — Date.now() 등 현재 시각에 의존하지 않는다.
+ * 통계 축과 화면 표기의 기준 시간대.
+ *
+ * `tastedAt` 은 `new Date().toISOString()` 으로 UTC(`Z`)로 저장되므로 문자열에 사용자의
+ * 벽시계 시각이 남지 않는다. 따라서 요일·시간대 파생은 실행 환경의 로컬 시간대가 아니라
+ * 이 상수를 기준으로 계산해야 한다. `getHours()` 같은 로컬 시각 API 를 쓰면 서버(Lambda·CI)
+ * 에서는 UTC 로 해석돼 "저녁에 마신 와인"이 다른 버킷으로 집계된다.
  */
-export function deriveWeekday(tastedAt: string): number {
-  return new Date(tastedAt).getDay();
+export const SERVICE_TIME_ZONE = 'Asia/Seoul';
+
+const ZONED_PARTS_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  timeZone: SERVICE_TIME_ZONE,
+  hourCycle: 'h23',
+  hour: '2-digit',
+  weekday: 'short',
+});
+
+const WEEKDAY_INDEX: Record<string, number> = {
+  Sun: 0,
+  Mon: 1,
+  Tue: 2,
+  Wed: 3,
+  Thu: 4,
+  Fri: 5,
+  Sat: 6,
+};
+
+/** ISO 시각을 서비스 시간대의 요일(0~6)·시(0~23)로 분해한다 */
+function zonedParts(tastedAt: string): { weekday: number; hour: number } {
+  const date = new Date(tastedAt);
+  if (Number.isNaN(date.getTime())) {
+    throw new Error(`tastedAt 을 시각으로 해석할 수 없습니다: ${tastedAt}`);
+  }
+  const parts = ZONED_PARTS_FORMATTER.formatToParts(date);
+  const weekdayLabel = parts.find((p) => p.type === 'weekday')?.value ?? '';
+  const hourValue = parts.find((p) => p.type === 'hour')?.value ?? '';
+  return {
+    weekday: WEEKDAY_INDEX[weekdayLabel] ?? 0,
+    // h23 이므로 자정은 '00' 으로 나온다
+    hour: Number(hourValue),
+  };
 }
 
 /**
- * `tastedAt`의 시(hour, 0~23)로부터 시간대 버킷을 계산한다.
+ * `tastedAt`에서 요일(0~6, 일요일=0)을 계산한다. 기준 시간대는 `SERVICE_TIME_ZONE`.
+ * 순수 함수 — 현재 시각이나 실행 환경의 로컬 시간대에 의존하지 않는다.
+ */
+export function deriveWeekday(tastedAt: string): number {
+  return zonedParts(tastedAt).weekday;
+}
+
+/**
+ * `tastedAt`의 시(hour, 0~23)로부터 시간대 버킷을 계산한다. 기준 시간대는 `SERVICE_TIME_ZONE`.
  * 05~10 dawn, 11~13 morning, 14~17 afternoon, 18~21 evening, 22~04 night.
  */
 export function deriveHourBucket(tastedAt: string): HourBucketLabel {
-  const hour = new Date(tastedAt).getHours();
+  const { hour } = zonedParts(tastedAt);
   if (hour >= 5 && hour <= 10) return 'dawn';
   if (hour >= 11 && hour <= 13) return 'morning';
   if (hour >= 14 && hour <= 17) return 'afternoon';
   if (hour >= 18 && hour <= 21) return 'evening';
   return 'night';
+}
+
+const YEAR_MONTH_FORMATTER = new Intl.DateTimeFormat('en-CA', {
+  timeZone: SERVICE_TIME_ZONE,
+  year: 'numeric',
+  month: '2-digit',
+});
+
+/**
+ * ISO 시각을 서비스 시간대 기준 `YYYY-MM` 으로 만든다.
+ * 로컬 시각(`getMonth()`)을 쓰면 UTC 환경에서 월초·월말 기록이 이전 달로 밀린다.
+ */
+export function deriveYearMonth(at: string): string {
+  const date = new Date(at);
+  if (Number.isNaN(date.getTime())) {
+    throw new Error(`시각으로 해석할 수 없습니다: ${at}`);
+  }
+  const parts = YEAR_MONTH_FORMATTER.formatToParts(date);
+  const year = parts.find((p) => p.type === 'year')?.value ?? '';
+  const month = parts.find((p) => p.type === 'month')?.value ?? '';
+  return `${year}-${month}`;
 }
 
 /** 빈티지 연도에서 연대(decade) 문자열을 계산한다 (예: 2018 → "2010s") */

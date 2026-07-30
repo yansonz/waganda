@@ -150,7 +150,8 @@ describe('computeStats', () => {
     );
     const spec: ComputeStatsSpec = { groupBy: 'weekday', metric: 'meanRating', minSampleSize: 4 };
     const result = computeStats(tastings, spec);
-    expect(result.groups[0].key).toBe(String(new Date('2024-01-15T19:00:00+09:00').getDay()));
+    // 서비스 시간대(Asia/Seoul) 기준 2024-01-15 는 월요일이므로 1 — 실행 환경과 무관하게 고정
+    expect(result.groups[0].key).toBe('1');
   });
 
   it('hourBucket 축 — tastedAt 에서 시간대 파생', () => {

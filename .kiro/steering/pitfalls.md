@@ -53,6 +53,19 @@ inclusion: always
 - 0.5 단위 제약이 걸린 시음 노트 스키마를 평균값에 재사용하면 저장이 항상 실패한다.
   평균은 `TastingNotesAverage` 를 쓴다.
 
+## 시간대
+
+`tastedAt` 은 `toISOString()` 으로 UTC(`Z`)로 저장돼 사용자의 벽시계 시각이 남지 않는다.
+그래서 `getHours()`·`getDay()`·`getMonth()` 같은 **로컬 시각 API 를 쓰면 안 된다.**
+서버(Lambda)와 CI 는 UTC 로 돌기 때문에 KST 19:30 기록이 `dawn` 으로 집계되고
+월초 기록이 이전 달로 밀린다(실제로 CI 를 깨뜨렸다).
+
+요일·시간대·연월 파생은 `lib/domain/types.ts` 의 `SERVICE_TIME_ZONE`(`Asia/Seoul`) 기준
+`deriveWeekday` / `deriveHourBucket` / `deriveYearMonth` 를 쓴다. 화면의 `toLocaleString` 계열도
+`{ timeZone: SERVICE_TIME_ZONE }` 을 넘긴다. 시각을 다루는 테스트는 기댓값을 **리터럴로** 적어
+실행 환경의 TZ 와 무관하게 고정하고, `TZ=UTC npx vitest run` 으로 확인한다.
+(예외: `agent/src/lib/budget.ts` 의 일·월 예산 키는 AWS 과금 기준에 맞춰 의도적으로 UTC 다.)
+
 ## 화자 분리 실측
 
 Transcribe 화자 분리는 조건부로 동작한다. 두 사람이 충분히 말하면 분리되고, 한쪽이 거의

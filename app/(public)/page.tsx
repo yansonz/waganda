@@ -8,6 +8,7 @@ import { TasteProfileCard } from '@/components/profile/TasteProfileCard';
 import { DiscoveryCard } from '@/components/discovery/DiscoveryCard';
 import { EmptyState } from '@/components/common/EmptyState';
 import Link from 'next/link';
+import { SERVICE_TIME_ZONE } from '@/lib/domain/types';
 
 /**
  * app/(public)/page.tsx — 공개 대시보드 (14.1, R9).
@@ -88,7 +89,9 @@ export default async function DashboardPage(): Promise<ReactElement> {
                 >
                   <span className="text-gold-400 font-semibold">{entry.score.toFixed(0)}점</span>
                   <span className="text-muted ml-2">
-                    {new Date(entry.tastedAt).toLocaleDateString('ko-KR')}
+                    {new Date(entry.tastedAt).toLocaleDateString('ko-KR', {
+                      timeZone: SERVICE_TIME_ZONE,
+                    })}
                   </span>
                 </Link>
               </li>

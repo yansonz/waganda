@@ -7,6 +7,7 @@
  * agreementScore = 100 - (|intensity 차이| * w1 + |valence 차이| * w2) 를 0~100 정규화
  */
 import type { SpeakerReaction } from '@waganda/schemas';
+import { deriveYearMonth } from './types';
 
 /** 감정 강도 차이의 가중치 */
 export const AGREEMENT_WEIGHT_INTENSITY = 50;
@@ -54,8 +55,7 @@ export function aggregateByMonth(entries: AgreementEntry[]): MonthlyAgreement[] 
   const buckets = new Map<string, number[]>();
 
   for (const entry of entries) {
-    const date = new Date(entry.at);
-    const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    const month = deriveYearMonth(entry.at);
     if (!buckets.has(month)) buckets.set(month, []);
     buckets.get(month)!.push(entry.score);
   }
