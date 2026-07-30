@@ -128,6 +128,29 @@ jobs:
           cache-from: type=gha,scope=web
           cache-to: type=gha,mode=max,scope=web
 
+      # `/_next/static/*` 는 S3 오리진에서 서빙되므로 배포 잡이 S3 에 올려야 한다.
+      # 추출은 **이 잡에서** 한다 — 러너가 arm64 라서 이미지 아키텍처와 일치하고,
+      # amd64 배포 잡에서 arm64 이미지를 다룰 때 생기는 플랫폼 문제를 피할 수 있다.
+      # 이미지에서 꺼내므로 Lambda 가 서빙하는 것과 정확히 같은 산출물이 보장된다.
+      - name: 정적 자산 추출
+        run: |
+          set -euo pipefail
+          IMAGE="${{ env.ECR_REGISTRY }}/waganda-web:${{ env.IMAGE_TAG }}"
+          docker pull "$IMAGE"
+          CID=$(docker create "$IMAGE")
+          rm -rf ./static-out && mkdir -p ./static-out
+          docker cp "$CID:/app/.next-prod/static" ./static-out/static
+          docker rm "$CID"
+          echo "추출: $(find ./static-out/static -type f | wc -l) 개 파일"
+
+      - name: 정적 자산 업로드 (배포 잡으로 전달)
+        uses: actions/upload-artifact@v4
+        with:
+          name: next-static
+          path: ./static-out/static
+          retention-days: 1
+          if-no-files-found: error
+
   build-agent:
     name: Build & Push — agent (Strands TS, ARM64)
     runs-on: ubuntu-24.04-arm
@@ -343,24 +366,25 @@ jobs:
         env:
           WAGANDA_IMAGE_TAG: ${{ env.IMAGE_TAG }}
 
-      # `/_next/static/*` 는 S3 오리진에서 서빙된다. 이 단계를 빼면 새 빌드의 청크가 404 가 되어
-      # 페이지가 스타일·스크립트 없이 렌더된다(CDK 는 BucketDeployment 를 쓰지 않는다).
-      # 산출물은 방금 푸시한 web 이미지에서 꺼낸다 — 런너에서 다시 빌드하지 않는다.
-      - name: 정적 자산 추출 및 S3 동기화
+      # 정적 자산은 arm64 빌드 잡이 이미지에서 꺼내 아티팩트로 넘긴다.
+      # (amd64 러너에서 arm64 이미지를 pull·create 하면 플랫폼 문제가 생긴다)
+      - name: 정적 자산 다운로드
+        uses: actions/download-artifact@v4
+        with:
+          name: next-static
+          path: ./static-out/static
+
+      - name: 정적 자산 S3 동기화
         run: |
           set -euo pipefail
-          IMAGE="${{ env.ECR_REGISTRY }}/waganda-web:${{ env.IMAGE_TAG }}"
-          # 러너는 amd64 이고 이미지는 arm64 전용이라 플랫폼을 명시해야 한다
-          # (없으면 `no matching manifest for linux/amd64` 로 실패한다).
-          # 컨테이너를 실행하지 않고 파일만 꺼내므로 에뮬레이션은 필요하지 않다.
-          docker pull --platform linux/arm64 "$IMAGE"
-          CID=$(docker create --platform linux/arm64 "$IMAGE")
-          rm -rf ./static-out && mkdir -p ./static-out
-          docker cp "$CID:/app/.next-prod/static" ./static-out/static
-          docker rm "$CID"
+          COUNT=$(find ./static-out/static -type f | wc -l)
+          if [ "$COUNT" -eq 0 ]; then
+            echo "::error::정적 자산이 비어 있습니다. 배포하면 /_next/static/* 가 404 가 됩니다."
+            exit 1
+          fi
           aws s3 sync ./static-out/static "s3://waganda-static-prod/_next/static/" \
             --cache-control "public,max-age=31536000,immutable" --delete --only-show-errors
-          echo "동기화 완료: $(find ./static-out/static -type f | wc -l) 개 파일"
+          echo "동기화 완료: ${COUNT} 개 파일"
 
       # 공개 페이지는 기본 7일 캐시라 새 배포 후에도 예전 HTML 이 남는다.
       # 정적 자산은 해시 파일명이라 무효화가 필요 없지만 HTML 은 필요하다.
