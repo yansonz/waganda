@@ -1,0 +1,185 @@
+# ─────────────────────────────────────────────────────────────
+# dependencies
+# ─────────────────────────────────────────────────────────────
+node_modules/
+.pnp
+.pnp.js
+.yarn/
+jspm_packages/
+
+# ─────────────────────────────────────────────────────────────
+# next.js / 빌드 산출물
+# ─────────────────────────────────────────────────────────────
+.next/
+.next-prod/
+.next-*/
+out/
+build/
+dist/
+next-env.d.ts
+.swc/
+
+# ─────────────────────────────────────────────────────────────
+# testing
+# ─────────────────────────────────────────────────────────────
+coverage/
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+# Playwright 저장 세션(storageState) — 실제 로그인 쿠키·JWT 가 들어간다
+.auth/
+**/storage-state*.json
+*.trace.zip
+
+# ─────────────────────────────────────────────────────────────
+# cdk
+# ─────────────────────────────────────────────────────────────
+infrastructure/cdk.out/
+cdk.out/
+infrastructure/*.d.ts
+infrastructure/*.js
+!infrastructure/jest.config.js
+# 계정 ID·호스팅 존 ID·AMI 조회 결과 등 환경 식별 정보가 캐시된다
+cdk.context.json
+**/cdk.context.json
+*.cdk.staging/
+cdk-outputs.json
+outputs.json
+
+# ─────────────────────────────────────────────────────────────
+# agent build
+# ─────────────────────────────────────────────────────────────
+agent/dist/
+
+# ─────────────────────────────────────────────────────────────
+# python (audio lambda)
+# ─────────────────────────────────────────────────────────────
+audio/.venv/
+.venv/
+venv/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# ─────────────────────────────────────────────────────────────
+# 환경변수 · 시크릿
+# 시크릿의 원본은 SSM Parameter Store 이며 저장소에 두지 않는다.
+# ─────────────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+.envrc
+.npmrc
+.netrc
+
+# ─────────────────────────────────────────────────────────────
+# AWS 자격증명 — 절대 커밋되지 않도록 넓게 막는다
+# ─────────────────────────────────────────────────────────────
+.aws/
+**/.aws/
+aws-credentials*
+aws_credentials*
+credentials
+credentials.*
+!credentials.example
+# 콘솔에서 IAM 액세스 키를 내려받으면 이 이름으로 저장된다
+accessKeys.csv
+new_user_credentials.csv
+*_accessKeys.csv
+# OIDC/역할 설정 산출물, 임시 세션 토큰 덤프
+sts-*.json
+assume-role*.json
+
+# ─────────────────────────────────────────────────────────────
+# 키 · 인증서 · 토큰
+# ─────────────────────────────────────────────────────────────
+*.pem
+*.key
+*.crt
+*.cer
+*.der
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.asc
+*.gpg
+id_rsa*
+id_ed25519*
+*.ppk
+*token*.json
+*secret*.json
+!package.json
+client_secret*.json
+service-account*.json
+gha-oidc*.json
+
+# ─────────────────────────────────────────────────────────────
+# 개인정보 · 실제 기록물
+# 부부 시음 녹음과 라벨 사진은 음성·얼굴·위치가 담길 수 있는 개인정보다.
+# 저장 위치는 S3(미디어 버킷)이며 저장소에는 어떤 실물도 두지 않는다.
+# ─────────────────────────────────────────────────────────────
+# 실물 보관 디렉토리는 저장소 루트에만 해당한다.
+# (app/api/.../recordings/ 같은 라우트 소스가 함께 무시되지 않도록 `/` 로 고정)
+/samples/
+/private/
+# 실제 시음 녹음·라벨 사진을 담아 두는 로컬 테스트 데이터 (개인 음성·이미지)
+/test-data/
+/testdata/
+/media/
+/recordings/
+/transcripts/
+/fixtures/audio/
+**/real-*/
+# 오디오·트랜스크립트 원본 (테스트는 합성 신호를 코드로 생성한다)
+*.mp3
+*.m4a
+*.wav
+*.webm
+*.aac
+*.flac
+*.ogg
+*.mp4
+*.mov
+*.heic
+*.HEIC
+*.heif
+# Transcribe 출력물
+*transcript*.json
+!**/transcript.fixture.json
+
+# ─────────────────────────────────────────────────────────────
+# 에디터 · OS
+# ─────────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+desktop.ini
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.iml
+*.swp
+*.swo
+*~
+
+# ─────────────────────────────────────────────────────────────
+# misc
+# ─────────────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.vercel
+.turbo
+tsconfig.tsbuildinfo
+*.tsbuildinfo
+tmp/
+.tmp/
+.cache/

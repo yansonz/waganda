@@ -1,0 +1,72 @@
+{
+  "name": "waganda",
+  "version": "0.1.0",
+  "private": true,
+  "description": "와간다 — 부부 와인 시음 기록 및 AI 분석 서비스",
+  "workspaces": [
+    "packages/*",
+    "agent",
+    "infrastructure"
+  ],
+  "scripts": {
+    "dev": "npm run db:up && npm run s3:up && next dev",
+    "dev:no-db": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "start:standalone": "node .next-prod/standalone/server.js",
+    "db:up": "tsx scripts/local-ddb.ts up",
+    "db:down": "tsx scripts/local-ddb.ts down",
+    "db:reset": "tsx scripts/local-ddb.ts reset",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit && npm run typecheck --workspaces --if-present",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:agent": "npm run test --workspace @waganda/agent",
+    "test:infra": "npm run test --workspace @waganda/infrastructure",
+    "test:all": "npm run test && npm run test:agent && npm run test:infra",
+    "dev:login": "tsx scripts/dev-login.ts",
+    "s3:up": "tsx scripts/local-s3.ts up",
+    "s3:down": "tsx scripts/local-s3.ts down",
+    "analyze:local": "tsx scripts/analyze-local.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-cloudfront": "3.1097.0",
+    "@aws-sdk/client-dynamodb": "3.1097.0",
+    "@aws-sdk/client-s3": "3.1097.0",
+    "@aws-sdk/client-ssm": "3.1097.0",
+    "@aws-sdk/client-transcribe": "3.1097.0",
+    "@aws-sdk/lib-dynamodb": "3.1097.0",
+    "@aws-sdk/s3-request-presigner": "3.1097.0",
+    "@waganda/schemas": "*",
+    "heic-convert": "2.1.0",
+    "jose": "6.2.4",
+    "next": "15.5.22",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "3.3.6",
+    "@playwright/test": "1.62.0",
+    "@tailwindcss/postcss": "4.3.3",
+    "@testing-library/dom": "10.4.1",
+    "@testing-library/jest-dom": "6.10.0",
+    "@testing-library/react": "16.3.2",
+    "@testing-library/user-event": "14.6.1",
+    "@types/heic-convert": "2.1.1",
+    "@types/node": "22.20.1",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "eslint": "9.39.5",
+    "eslint-config-next": "15.5.22",
+    "jsdom": "30.0.1",
+    "tailwindcss": "4.3.3",
+    "tsx": "4.20.6",
+    "typescript": "5.9.3",
+    "vitest": "3.2.7"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
