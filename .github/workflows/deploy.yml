@@ -15,9 +15,12 @@ permissions:
   contents: read
   id-token: write
 
+# 새 커밋이 오면 아직 빌드 중인 낡은 실행은 취소한다.
+# (취소하지 않으면 실패가 확정된 실행이 큐를 막아 후속 커밋이 배포되지 못한다.
+#  실제 배포 단계는 아래 deploy-prod 잡에서 별도 concurrency 로 보호한다.)
 concurrency:
   group: deploy-${{ github.workflow }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   NODE_VERSION: '22'
@@ -262,6 +265,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build-web, check-agent-image-size, build-audio]
     environment: prod
+    # CloudFormation 배포가 중간에 취소되면 스택이 UPDATE_IN_PROGRESS 로 남을 수 있다.
+    # 워크플로 수준 취소와 분리해 이 잡은 끝까지 실행한다.
+    concurrency:
+      group: waganda-prod-apply
+      cancel-in-progress: false
     permissions:
       contents: read
       id-token: write
