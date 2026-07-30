@@ -85,7 +85,7 @@ jobs:
 
   build-web:
     name: Build & Push — web (Next.js, ARM64)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     needs: [preflight, ci]
     permissions:
       contents: read
@@ -103,10 +103,6 @@ jobs:
       - name: ECR 로그인
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: QEMU 설정 (ARM64 크로스 빌드)
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
 
       - name: Docker Buildx 설정
         uses: docker/setup-buildx-action@v3
@@ -126,7 +122,7 @@ jobs:
 
   build-agent:
     name: Build & Push — agent (Strands TS, ARM64)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     needs: [preflight, ci]
     permissions:
       contents: read
@@ -146,10 +142,6 @@ jobs:
       - name: ECR 로그인
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: QEMU 설정 (ARM64 크로스 빌드)
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
 
       - name: Docker Buildx 설정
         uses: docker/setup-buildx-action@v3
@@ -178,7 +170,7 @@ jobs:
 
   check-agent-image-size:
     name: 에이전트 이미지 크기 검사 (2GB 상한)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     needs: [build-agent]
     permissions:
       contents: read
@@ -212,7 +204,7 @@ jobs:
 
   build-audio:
     name: Build & Push — audio (Python Lambda, ARM64)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     needs: [preflight, ci]
     permissions:
       contents: read
@@ -241,11 +233,6 @@ jobs:
         if: steps.check.outputs.exists == 'true'
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: QEMU 설정 (ARM64 크로스 빌드)
-        if: steps.check.outputs.exists == 'true'
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
 
       - name: Docker Buildx 설정
         if: steps.check.outputs.exists == 'true'
