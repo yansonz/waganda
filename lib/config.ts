@@ -1,4 +1,5 @@
 import { GetParametersCommand, SSMClient } from '@aws-sdk/client-ssm';
+import { isTestMode } from '@/lib/aws/testGuard';
 
 /**
  * 설정과 시크릿의 단일 주입 지점.
@@ -65,7 +66,7 @@ export function getRuntimeConfig(): RuntimeConfig {
   const env = (optionalEnv('WAGANDA_ENV') ?? 'local') as AppEnv;
   return {
     env,
-    region: optionalEnv('AWS_REGION') ?? optionalEnv('AWS_DEFAULT_REGION') ?? 'ap-northeast-2',
+    region: resolveRegion(),
     tableName: requireEnv('WAGANDA_TABLE_NAME'),
     mediaBucket: requireEnv('WAGANDA_MEDIA_BUCKET'),
     appBaseUrl: requireEnv('APP_BASE_URL'),
@@ -79,13 +80,21 @@ export function getRuntimeConfig(): RuntimeConfig {
 
 /* ── SSM 조회 (환경변수 미주입 시 폴백) ─────────────────────────── */
 
+/** 리전 결정 — 필수 설정을 요구하지 않는다(에이전트 런타임처럼 최소 환경변수만 있는 경로도 통과해야 함) */
+function resolveRegion(): string {
+  return optionalEnv('AWS_REGION') ?? optionalEnv('AWS_DEFAULT_REGION') ?? 'ap-northeast-2';
+}
+
 let ssmClient: SSMClient | undefined;
 let ssmCache: Record<string, string> | undefined;
+/** 검색 키 조회 결과 캐시. 값이 없다는 결과도 캐시해 매 요청 SSM 을 두드리지 않는다. */
+let searchApiKeyCache: { value: string | undefined } | undefined;
 
 /** 테스트에서 캐시를 비우기 위한 훅 */
 export function resetConfigCache(): void {
   ssmCache = undefined;
   ssmClient = undefined;
+  searchApiKeyCache = undefined;
 }
 
 function ssmParameterPrefix(): string {
@@ -100,11 +109,44 @@ const SSM_KEYS = {
   allowlist: 'auth/editor-allowlist',
 } as const;
 
+/**
+ * 라벨 보강용 웹 검색 키(SerpAPI).
+ *
+ * 인증 시크릿과 **분리해서** 조회한다. `loadFromSsm()` 은 목록 중 하나라도 없으면 던지는데,
+ * 이 키는 선택 항목이므로 같은 목록에 넣으면 키가 없는 환경에서 로그인까지 깨진다.
+ *
+ * 조회 순서: 환경변수 `SERPAPI_KEY` → SSM `<prefix>/search/serpapi-key` → undefined.
+ * SSM 조회 실패(파라미터 없음·권한 없음)는 **오류로 올리지 않는다** — 보강은 최선 노력이고,
+ * 없으면 모델 지식만으로 채우는 것이 정상 동작이다.
+ */
+export async function getSearchApiKey(): Promise<string | undefined> {
+  const fromEnv = optionalEnv('SERPAPI_KEY');
+  if (fromEnv) return fromEnv;
+
+  // 테스트에서는 SSM 을 부르지 않는다(네트워크·요금 차단 규칙).
+  if (isTestMode()) return undefined;
+
+  if (searchApiKeyCache) return searchApiKeyCache.value;
+
+  const name = `${ssmParameterPrefix()}/search/serpapi-key`;
+  try {
+    ssmClient ??= new SSMClient({ region: resolveRegion() });
+    const result = await ssmClient.send(
+      new GetParametersCommand({ Names: [name], WithDecryption: true }),
+    );
+    const value = result.Parameters?.[0]?.Value?.trim();
+    searchApiKeyCache = { value: value && value.length > 0 ? value : undefined };
+  } catch {
+    searchApiKeyCache = { value: undefined };
+  }
+  return searchApiKeyCache.value;
+}
+
 async function loadFromSsm(): Promise<Record<string, string>> {
   if (ssmCache) return ssmCache;
   const prefix = ssmParameterPrefix();
   const names = Object.values(SSM_KEYS).map((suffix) => `${prefix}/${suffix}`);
-  ssmClient ??= new SSMClient({ region: getRuntimeConfig().region });
+  ssmClient ??= new SSMClient({ region: resolveRegion() });
   const result = await ssmClient.send(
     new GetParametersCommand({ Names: names, WithDecryption: true }),
   );

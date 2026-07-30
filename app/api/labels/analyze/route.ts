@@ -6,7 +6,7 @@ import { toDomainErrorResponse, parseJsonBody } from '@/lib/api/errors';
 import { invokeAgentRuntime } from '@/lib/agent/client';
 import { isDirectLabelFallbackEnabled, recognizeLabelWithBedrock } from '@/lib/agent/labelDirect';
 import { enrichLabelExtraction } from '@/lib/agent/labelEnrich';
-import { getSearchProvider } from '@/lib/search/serpapi';
+import { resolveSearchProvider } from '@/lib/search/serpapi';
 import { getRuntimeConfig } from '@/lib/config';
 
 const RequestBody = z.object({
@@ -68,7 +68,10 @@ export const POST = withEditorGuard(async (request: NextRequest) => {
       }
 
       // 검색 키가 있으면 검색 근거로 채우고, 없으면 모델 지식만으로 채운다
-      const enriched = await enrichLabelExtraction(recognized, { search: getSearchProvider() });
+      // (키는 환경변수 또는 SSM SecureString 에서 해석한다)
+      const enriched = await enrichLabelExtraction(recognized, {
+        search: await resolveSearchProvider(),
+      });
       return NextResponse.json({
         label: enriched.extraction,
         via: 'bedrock-direct',

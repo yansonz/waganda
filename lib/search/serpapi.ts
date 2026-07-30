@@ -1,5 +1,6 @@
 import type { SearchHit } from '@/lib/agent/labelEnrich';
 import { assertExternalCallAllowed } from '@/lib/aws/testGuard';
+import { getSearchApiKey } from '@/lib/config';
 
 /**
  * lib/search/serpapi.ts — SerpAPI 웹 검색 프로바이더.
@@ -60,9 +61,17 @@ export function parseSerpApiResponse(body: SerpApiResponse, limit = 3): SearchHi
   return hits.slice(0, limit);
 }
 
-/** SerpAPI 로 검색한다. 키가 없거나 실패하면 빈 배열을 돌려준다. */
-export async function serpApiSearch(query: string, limit = 3): Promise<SearchHit[]> {
-  const apiKey = process.env.SERPAPI_KEY;
+/**
+ * SerpAPI 로 검색한다. 키가 없거나 실패하면 빈 배열을 돌려준다.
+ *
+ * `apiKey` 를 넘기지 않으면 `SERPAPI_KEY` 환경변수를 쓴다.
+ * 배포 환경은 SSM SecureString 에서 읽은 값을 넘긴다(`resolveSearchProvider`).
+ */
+export async function serpApiSearch(
+  query: string,
+  limit = 3,
+  apiKey = process.env.SERPAPI_KEY,
+): Promise<SearchHit[]> {
   if (!apiKey) return [];
 
   const cacheKey = `${limit}:${query}`;
@@ -104,6 +113,8 @@ export async function serpApiSearch(query: string, limit = 3): Promise<SearchHit
 /**
  * 설정된 검색 프로바이더를 돌려준다. 키가 없으면 `undefined` —
  * 보강 단계는 모델 지식만으로 진행한다.
+ *
+ * 환경변수만 본다. 배포 환경(SSM SecureString)에서는 `resolveSearchProvider()` 를 쓴다.
  */
 export function getSearchProvider(): ((query: string) => Promise<SearchHit[]>) | undefined {
   if (!process.env.SERPAPI_KEY) return undefined;
@@ -111,5 +122,23 @@ export function getSearchProvider(): ((query: string) => Promise<SearchHit[]>) |
     // 유료 API 다 — 테스트에서는 검색을 주입해야 한다
     assertExternalCallAllowed('SerpAPI 웹 검색');
     return serpApiSearch(query, 3);
+  };
+}
+
+/**
+ * 검색 프로바이더를 해석한다 — 환경변수 → SSM SecureString 순서.
+ *
+ * 배포 환경에서는 키를 Lambda·AgentCore 환경변수에 평문으로 두지 않고
+ * `/waganda/<env>/search/serpapi-key` 에서 읽는다. 키가 없으면 `undefined` 이고
+ * 보강은 검색 없이 진행한다(선택 기능이므로 실패가 아니다).
+ */
+export async function resolveSearchProvider(): Promise<
+  ((query: string) => Promise<SearchHit[]>) | undefined
+> {
+  const apiKey = await getSearchApiKey();
+  if (!apiKey) return undefined;
+  return (query: string) => {
+    assertExternalCallAllowed('SerpAPI 웹 검색');
+    return serpApiSearch(query, 3, apiKey);
   };
 }

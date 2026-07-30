@@ -32,7 +32,7 @@ import { createSommelierAgent } from './agents/sommelier.js';
 import { createTasteProfileAgent } from './agents/tasteProfile.js';
 import { createDiscoveryAgent } from './agents/discovery.js';
 import { createLabelAgent } from './agents/label.js';
-import { getSearchProvider } from '@app/search/serpapi';
+import { resolveSearchProvider } from '@app/search/serpapi';
 import type { StatsInputTasting } from '@app/domain/types';
 import { deriveHourBucket, deriveWeekday } from '@app/domain/types';
 
@@ -286,8 +286,13 @@ async function handleAnalyzeLabel(
   const repo = new DynamoDbRepository(getDynamoDocClient());
   const trace = startTrace('analyze_label');
   const model = buildModel();
-  // 라벨 보강용 웹 검색 — SERPAPI_KEY 가 없으면 undefined 이고 도구는 빈 결과를 돌려준다
-  const agent = createLabelAgent({ model, repo, webSearchProvider: getSearchProvider() });
+  // 라벨 보강용 웹 검색 — 키가 없으면 undefined 이고 도구는 빈 결과를 돌려준다
+  // (환경변수 SERPAPI_KEY → SSM `/waganda/<env>/search/serpapi-key` 순서로 해석한다)
+  const agent = createLabelAgent({
+    model,
+    repo,
+    webSearchProvider: await resolveSearchProvider(),
+  });
 
   const agentResult = await agent.invoke(
     `<label_image_key_untrusted>${input.imageKey}</label_image_key_untrusted>${input.hint ? `\n<hint_untrusted>${input.hint}</hint_untrusted>` : ''}`,
