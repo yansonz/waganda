@@ -1,0 +1,103 @@
+@import 'tailwindcss';
+
+/*
+ * 와간다 와인 테마 — 다크 모드 기본
+ * 버건디(주조) / 골드(강조) / 크림(본문) / 다크(배경)
+ */
+@theme {
+  /* 버건디 계열 */
+  --color-burgundy-50: #fbf3f5;
+  --color-burgundy-100: #f6e2e8;
+  --color-burgundy-200: #ecc3cf;
+  --color-burgundy-300: #dc94aa;
+  --color-burgundy-400: #c65f7f;
+  --color-burgundy-500: #a8385d;
+  --color-burgundy-600: #8b264a;
+  --color-burgundy-700: #6b1f3a;
+  --color-burgundy-800: #521830;
+  --color-burgundy-900: #3d1224;
+  --color-burgundy-950: #240a15;
+
+  /* 골드 계열 */
+  --color-gold-200: #f0e2b6;
+  --color-gold-300: #e3cd85;
+  --color-gold-400: #d4b45a;
+  --color-gold-500: #c9a227;
+  --color-gold-600: #a4821c;
+  --color-gold-700: #7c6115;
+
+  /* 크림 / 다크 */
+  --color-cream-50: #fdfbf7;
+  --color-cream-100: #f7f1e6;
+  --color-cream-200: #ece2cf;
+  --color-cream-300: #d9cbb2;
+  --color-ink-700: #2a2422;
+  --color-ink-800: #1d1917;
+  --color-ink-900: #14100f;
+  --color-ink-950: #0c0a09;
+
+  /* 의미 색상 */
+  --color-surface: var(--color-ink-900);
+  --color-surface-raised: var(--color-ink-800);
+  --color-surface-sunken: var(--color-ink-950);
+  --color-accent: var(--color-gold-500);
+  --color-primary: var(--color-burgundy-700);
+  --color-body: var(--color-cream-100);
+  --color-muted: var(--color-cream-300);
+
+  /* 폰트 */
+  --font-display: 'Playfair Display', 'Pretendard', serif;
+  --font-sans: 'Pretendard', system-ui, -apple-system, sans-serif;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+@layer base {
+  html {
+    background-color: var(--color-ink-900);
+  }
+
+  body {
+    background-color: var(--color-ink-900);
+    color: var(--color-cream-100);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    letter-spacing: -0.01em;
+  }
+
+  /* 접근성: 키보드 포커스가 항상 보이도록 */
+  :focus-visible {
+    outline: 2px solid var(--color-gold-500);
+    outline-offset: 2px;
+  }
+
+  /* 모션 민감 사용자 배려 */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer utilities {
+  .card {
+    background-color: var(--color-ink-800);
+    border: 1px solid color-mix(in oklab, var(--color-gold-500) 18%, transparent);
+    border-radius: 0.75rem;
+  }
+
+  .text-muted {
+    color: var(--color-cream-300);
+  }
+}
