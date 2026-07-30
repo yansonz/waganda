@@ -267,6 +267,13 @@ export class WagandaWebStack extends Stack {
       minTtl: Duration.minutes(1),
       enableAcceptEncodingGzip: true,
       enableAcceptEncodingBrotli: true,
+      // App Router 의 클라이언트 라우팅(soft navigation)은 같은 경로에 `RSC: 1` 헤더와
+      // `?_rsc=` 쿼리를 붙여 **RSC payload**(`text/x-component`)를 요청한다.
+      // 이 둘을 캐시 키에 넣지 않으면 캐시된 HTML 이 RSC 요청에 반환되어
+      // 클라이언트가 응답을 해석하지 못하고 **빈 화면**이 된다. 캐시가 살아있는 동안
+      // 뒤로가기도 같은 잘못된 응답을 받고, 새로고침(hard navigation)만 정상 동작한다.
+      queryStringBehavior: cloudfront.CacheQueryStringBehavior.all(),
+      headerBehavior: cloudfront.CacheHeaderBehavior.allowList('RSC', 'Next-Router-Prefetch'),
     });
 
     // 동적 경로(API·기록 화면)는 쿠키·헤더·쿼리를 그대로 오리진에 전달해야 한다.

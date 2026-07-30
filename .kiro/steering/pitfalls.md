@@ -37,6 +37,11 @@ inclusion: always
   요구한다. CDK 의 `withOriginAccessControl` 은 앞쪽만 부여하므로 나머지를 직접 추가해야 한다.
 - 오리진 요청 정책으로 `ALL_VIEWER_EXCEPT_HOST_HEADER` 를 쓰지 않는다. Authorization 을 전달해
   OAC 서명과 충돌한다. host·authorization 을 제외한 커스텀 정책을 쓴다.
+- **공개 페이지 캐시 키에 `RSC` 헤더와 쿼리 문자열을 반드시 포함한다.** App Router 의 클라이언트
+  라우팅은 같은 경로에 `RSC: 1` 헤더와 `?_rsc=` 쿼리를 붙여 RSC payload(`text/x-component`)를
+  요청한다. 캐시 키가 이를 구분하지 않으면 캐시된 HTML 이 RSC 요청에 반환되어 **탭 이동 시
+  빈 화면**이 된다. 캐시가 살아있는 동안 뒤로가기도 같은 응답을 받고 새로고침만 정상 동작한다.
+  진단은 `curl -H 'RSC: 1' <url>` 로 content-type 을 보면 된다.
 - 컨테이너 Lambda 로 Next.js 를 돌리려면 **Lambda Web Adapter** 가 필요하다. 없으면 서버가
   포트에 뜨기만 하고 런타임 API 에 응답하지 않아 init/invoke 가 타임아웃한다.
 - 이미지 태그를 `latest` 로 고정하면 새 이미지를 푸시해도 CloudFormation 이 변경을 감지하지 못해

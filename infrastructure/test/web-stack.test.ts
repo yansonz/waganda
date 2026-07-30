@@ -180,4 +180,21 @@ describe('WagandaWebStack', () => {
       Principal: 'cloudfront.amazonaws.com',
     });
   });
+  it('공개 페이지 캐시 키가 RSC 요청을 구분한다', () => {
+    // App Router 의 soft navigation 은 같은 경로에 `RSC: 1` 헤더와 `?_rsc=` 쿼리를 붙여
+    // RSC payload 를 요청한다. 캐시 키가 이를 구분하지 않으면 캐시된 HTML 이 반환되어
+    // 클라이언트가 응답을 해석하지 못하고 빈 화면이 된다(실제로 겪었다).
+    template.hasResourceProperties('AWS::CloudFront::CachePolicy', {
+      CachePolicyConfig: Match.objectLike({
+        Name: 'waganda-public-dev',
+        ParametersInCacheKeyAndForwardedToOrigin: Match.objectLike({
+          QueryStringsConfig: { QueryStringBehavior: 'all' },
+          HeadersConfig: Match.objectLike({
+            HeaderBehavior: 'whitelist',
+            Headers: Match.arrayWith(['RSC']),
+          }),
+        }),
+      }),
+    });
+  });
 });
