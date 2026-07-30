@@ -67,6 +67,21 @@ inclusion: always
   Route53 레코드가 사라지고 Lambda 환경변수가 빈다. 로컬은 gitignored `cdk.context.json`,
   CI 는 GitHub Variables 로 채우고 누락 시 배포 전에 실패시킨다.
 
+## AgentCore Runtime 계약
+
+- **`AWS_REGION` 을 주지 않는다.** Lambda 는 자동으로 넣어주지만 AgentCore Runtime 은 아니다.
+  없으면 SDK 클라이언트 생성에서 즉시 실패해 모든 분석 요청이 500 이 된다.
+  Runtime `EnvironmentVariables` 에 명시한다(`infrastructure/lib/pipeline-stack.ts`).
+- `/ping` 응답의 `status` 는 **`Healthy` 또는 `HealthyBusy`** 여야 한다(소문자 불가).
+  `time_of_last_update` 는 상태가 실제로 바뀔 때만 넣는다 — 매 ping 마다 갱신하면
+  유휴 세션 타임아웃이 발동하지 않아 세션 쿼터를 소진한다.
+- **런타임은 컨테이너의 500 을 `RuntimeClientError` 로 감싸 호출자에게 사유를 주지 않는다.**
+  그래서 예외를 반드시 로그로 남겨야 한다. stderr 가 수집되지 않는 경우가 있어
+  `console.log`(stdout)을 쓴다. 로그가 없으면 원인 추적이 불가능하다.
+- 헬스체크는 2초 간격이다. `/ping` 에 로그를 남기면 CloudWatch 비용이 계속 발생한다.
+- 원인 분리가 막히면 **같은 이미지를 로컬에서 `docker run` 해 같은 요청을 보낸다.**
+  실제로 이 방법으로 `AWS_REGION` 누락을 찾았다(런타임 로그만으로는 보이지 않았다).
+
 ## Next.js
 
 - 미들웨어에서 AWS SDK·`node:crypto` 를 쓰려면 `experimental.nodeMiddleware` 가 필요하다

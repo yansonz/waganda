@@ -210,6 +210,9 @@ describe('Pipeline Stack Validation', () => {
         WAGANDA_ENV: 'dev',
         WAGANDA_TABLE_NAME: 'waganda-dev',
         WAGANDA_MEDIA_BUCKET: 'waganda-media-dev',
+        // AgentCore Runtime 은 Lambda 와 달리 AWS_REGION 을 주지 않는다.
+        // 없으면 SDK 클라이언트 생성에서 실패해 모든 분석 요청이 500 이 된다(실제로 겪었다).
+        AWS_REGION: 'ap-northeast-2',
       }),
     });
 

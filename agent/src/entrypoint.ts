@@ -80,7 +80,12 @@ function readBody(req: IncomingMessage): Promise<string> {
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   const payload = JSON.stringify(body);
-  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
+  // AgentCore 계약은 `Content-Type: application/json` 을 명시한다.
+  // charset 파라미터를 붙이지 않는다 — 런타임이 헬스체크 응답을 엄격히 판별한다.
+  res.writeHead(status, {
+    'Content-Type': 'application/json',
+    'Content-Length': Buffer.byteLength(payload).toString(),
+  });
   res.end(payload);
 }
 
@@ -334,6 +339,12 @@ async function handleInvocation(rawBody: string): Promise<AgentInvocationResult>
   }
 
   const input = validation.data;
+  // 개인정보가 아닌 식별자만 남긴다 — 어떤 요청이 실패했는지 추적할 수 있어야 한다.
+  console.log(
+    `[agent] 요청 접수: task=${input.task}` +
+      ('tastingId' in input ? ` tastingId=${input.tastingId}` : '') +
+      ('imageKey' in input ? ` imageKey=${input.imageKey}` : ''),
+  );
   switch (input.task) {
     case 'analyze_upload':
       return handleAnalyzeUpload(input);
@@ -346,28 +357,44 @@ async function handleInvocation(rawBody: string): Promise<AgentInvocationResult>
 
 const server = createServer((req, res) => {
   if (req.method === 'GET' && req.url === '/ping') {
-    sendJson(res, 200, { status: 'healthy' });
+    // 헬스체크는 2초 간격으로 들어온다 — 로그를 남기지 않는다(비용·노이즈).
+    //
+    // AgentCore 계약은 `status` 값으로 **`Healthy` 또는 `HealthyBusy`** 만 인정한다.
+    // `time_of_last_update` 는 넣지 않는다. 매 ping 마다 값이 바뀌면 런타임이
+    // 상태가 계속 변한다고 보아 유휴 세션 타임아웃이 발동하지 않고 세션이
+    // MaxLifetime 까지 유지돼 세션 쿼터를 소진한다(문서 경고).
+    sendJson(res, 200, { status: 'Healthy' });
     return;
   }
 
   if (req.method === 'POST' && req.url === '/invocations') {
+    // AgentCore 는 런타임의 500 을 감싸서 `RuntimeClientError` 만 호출자에게 전달한다.
+    // 그래서 **원인은 CloudWatch 로그로만** 알 수 있다. stderr 가 수집되지 않는 경우가
+    // 있어 stdout(`console.log`)으로 남긴다.
     readBody(req)
       .then(async (body) => {
         try {
           const result = await handleInvocation(body);
+          console.log(`[agent] 처리 완료: task=${result.task} ok=${result.ok}`);
           sendJson(res, 200, result);
         } catch (err) {
           const reason = err instanceof Error ? err.message : String(err);
+          console.log(
+            `[agent] 실행 실패: ${reason}`,
+            err instanceof Error && err.stack ? `\n${err.stack}` : '',
+          );
           sendJson(res, 500, { ok: false, error: reason });
         }
       })
       .catch((err) => {
         const reason = err instanceof Error ? err.message : String(err);
+        console.log(`[agent] 요청 본문 수신 실패: ${reason}`);
         sendJson(res, 500, { ok: false, error: reason });
       });
     return;
   }
 
+  console.log(`[agent] 지원하지 않는 경로: ${req.method} ${req.url}`);
   sendJson(res, 404, { error: '지원하지 않는 경로입니다.' });
 });
 
@@ -375,8 +402,9 @@ const server = createServer((req, res) => {
 export { handleInvocation, server };
 
 if (process.env['NODE_ENV'] !== 'test') {
-  server.listen(PORT, () => {
-     
-    console.log(`waganda agent listening on :${PORT}`);
+  // AgentCore 계약: Host `0.0.0.0`, Port `8080`.
+  // 호스트를 생략하면 Node 가 `::` 에 바인딩하므로 명시한다.
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`waganda agent listening on 0.0.0.0:${PORT}`);
   });
 }

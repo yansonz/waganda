@@ -269,6 +269,9 @@ export class WagandaPipelineStack extends Stack {
           WAGANDA_TABLE_NAME: names.table,
           WAGANDA_MEDIA_BUCKET: names.mediaBucket,
           APP_BASE_URL: `https://${envConfig.domain}`,
+          // **AgentCore Runtime 은 `AWS_REGION` 을 주지 않는다**(Lambda 와 다르다).
+          // 없으면 SDK 클라이언트 생성 단계에서 즉시 실패해 모든 분석 요청이 500 이 된다.
+          AWS_REGION: envConfig.region,
           // entrypoint 가 읽는 이름 (위의 WAGANDA_* 와 별개 규약)
           MEDIA_BUCKET: names.mediaBucket,
           AUDIO_LAMBDA_FUNCTION_NAME: audioLambda.functionName,
