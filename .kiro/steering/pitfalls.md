@@ -104,6 +104,18 @@ inclusion: always
   같은 디렉토리로 빌드하면 청크가 섞여 `a[d] is not a function` 이 난다.
 - `robots.ts` 같은 메타데이터 라우트는 빌드 시점에 런타임 설정을 요구하면 안 된다.
 
+## 미디어 서빙 (`/media/*`)
+
+- **CloudFront 는 요청 경로를 그대로 S3 키로 쓴다.** `/media/labels/x.jpg` 는
+  `media/labels/x.jpg` 를 찾으므로 실제 키(`labels/x.jpg`)와 빗나간다.
+  `/media` 접두어를 벗기는 CloudFront Function 을 붙여야 한다.
+  객체가 없을 때 `s3:ListBucket` 권한이 없으면 S3 는 404 가 아니라 **403 AccessDenied** 를
+  돌려주므로 권한 문제로 오해하기 쉽다.
+- **`next/image` 최적화를 미디어에 쓰지 않는다(`unoptimized`).** 최적화는 서버가 원본을
+  다시 가져오는데, `/media/*` 는 CloudFront 가 S3 로 직접 보내는 경로라 Lambda 안에서
+  접근할 수 없다(`app/media/[...key]/route.ts` 는 로컬 전용이다).
+  켜면 `The requested resource isn't a valid image` 로 깨진다.
+
 ## S3 / 업로드
 
 - **미디어 버킷에 CORS 규칙이 있어야 한다.** 브라우저가 사전 서명 URL 로 S3 에 직접 PUT 하므로

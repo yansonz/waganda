@@ -140,6 +140,15 @@ export default async function TastingDetailPage({ params }: PageProps): Promise<
           alt={`${wine?.name ?? '와인'} 라벨 사진`}
           width={320}
           height={320}
+          /*
+           * 최적화를 쓰지 않는다.
+           * `next/image` 최적화는 서버가 원본을 다시 가져와 변환하는데, `/media/*` 는
+           * CloudFront 가 S3 로 직접 보내는 경로라 Lambda 안에서는 접근할 수 없다
+           * (`app/media/[...key]/route.ts` 는 로컬 전용이다). 그래서 최적화를 켜면
+           * "The requested resource isn't a valid image" 로 깨진다.
+           * 브라우저가 CDN 에서 바로 받게 하고, 캐시는 `/media/*` 정책(30일)이 담당한다.
+           */
+          unoptimized
           className="max-h-80 w-auto rounded-lg border border-gold-500/20 object-contain"
         />
       )}

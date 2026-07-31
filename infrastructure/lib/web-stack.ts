@@ -303,8 +303,30 @@ export class WagandaWebStack extends Stack {
     const staticOrigin = cloudfront_origins.S3BucketOrigin.withOriginAccessControl(staticBucket, {
       originAccessControl: s3Oac,
     });
-    // 미디어 키 프리픽스는 lib/upload/presign.ts 의 규약(recordings/ 등)을 따른다.
-    // `/media/*` 요청은 CloudFront 함수 없이 그대로 버킷 루트에 매핑한다.
+    // 미디어 키 프리픽스는 lib/upload/presign.ts 의 규약(labels/·recordings/)을 따른다.
+    //
+    // CloudFront 는 요청 경로를 **그대로** S3 키로 쓴다. 그래서 `/media/labels/x.jpg` 는
+    // `media/labels/x.jpg` 를 찾고, 실제 키는 `labels/x.jpg` 라 빗나간다.
+    // (객체가 없을 때 s3:ListBucket 권한이 없으면 S3 는 404 가 아니라 **403 AccessDenied**
+    //  를 반환해 권한 문제로 오해하기 쉽다 — 실제로 라벨 사진이 깨져 보였다.)
+    //
+    // 그래서 오리진 요청 직전에 `/media` 접두어를 벗긴다. CloudFront Function 은
+    // 호출당 과금이고 무료 티어가 커서 상시 비용이 없다.
+    const stripMediaPrefix = new cloudfront.Function(this, 'StripMediaPrefix', {
+      functionName: `waganda-strip-media-prefix-${envConfig.resourceSuffix}`,
+      comment: '/media/<key> → <key> (S3 키 규약과 일치시킨다)',
+      runtime: cloudfront.FunctionRuntime.JS_2_0,
+      code: cloudfront.FunctionCode.fromInline(`
+function handler(event) {
+  var request = event.request;
+  if (request.uri.indexOf('/media/') === 0) {
+    request.uri = request.uri.substring('/media'.length);
+  }
+  return request;
+}
+      `),
+    });
+
     const mediaOrigin = cloudfront_origins.S3BucketOrigin.withOriginAccessControl(mediaBucket, {
       originAccessControl: s3Oac,
     });
@@ -340,6 +362,13 @@ export class WagandaWebStack extends Stack {
           viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
           cachePolicy: cacheMedia,
           compress: true,
+          // 오리진에 보내기 전에 `/media` 접두어를 벗긴다(위 stripMediaPrefix 주석 참조).
+          functionAssociations: [
+            {
+              function: stripMediaPrefix,
+              eventType: cloudfront.FunctionEventType.VIEWER_REQUEST,
+            },
+          ],
         },
         '/api/*': dynamicBehavior,
         '/record': dynamicBehavior,
