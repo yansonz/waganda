@@ -16,11 +16,13 @@ import { WagandaOpsStack } from '../lib/ops-stack';
 
 const app = new cdk.App();
 
-// 환경 컨텍스트 읽기 (기본값 'prod' — 이 프로젝트는 prod 환경만 배포한다)
+// 환경 컨텍스트 읽기 — 이 프로젝트는 prod 만 배포한다(dev 환경은 없다).
 const envName = app.node.tryGetContext('env') || 'prod';
 
-if (envName !== 'dev' && envName !== 'prod') {
-  throw new Error(`Invalid environment context: ${envName}. Must be 'dev' or 'prod'.`);
+if (envName !== 'prod') {
+  throw new Error(
+    `Invalid environment context: ${envName}. 이 프로젝트는 'prod' 만 배포한다(dev 환경 없음).`,
+  );
 }
 
 const envConfig = getEnvironmentConfig(envName);

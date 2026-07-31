@@ -12,7 +12,7 @@
 #     --serpapi-key "..."
 #
 # 옵션:
-#   --env ENV                       dev 또는 prod (필수)
+#   --env ENV                       prod (필수) — 이 프로젝트는 prod 만 배포한다
 #   --google-client-id VALUE        Google OAuth Client ID
 #   --google-client-secret VALUE    Google OAuth Client Secret
 #   --jwt-secret VALUE              JWT 서명 키 (HS256)
@@ -59,12 +59,12 @@ done
 
 # 필수 옵션 검증
 if [[ -z "$ENV" ]]; then
-  echo "ERROR: --env 이 필수입니다 (dev 또는 prod)"
+  echo "ERROR: --env 이 필수입니다 (prod)"
   exit 1
 fi
 
-if [[ "$ENV" != "dev" && "$ENV" != "prod" ]]; then
-  echo "ERROR: --env 은 'dev' 또는 'prod' 이어야 합니다"
+if [[ "$ENV" != "prod" ]]; then
+  echo "ERROR: --env 은 'prod' 여야 합니다 (dev 환경은 없다)"
   exit 1
 fi
 

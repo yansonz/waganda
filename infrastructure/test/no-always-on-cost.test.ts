@@ -37,7 +37,7 @@ const ALWAYS_ON_RESOURCE_TYPES = [
   'AWS::GlobalAccelerator::Accelerator',
 ];
 
-function synthesizeAllTemplates(env: 'dev' | 'prod'): Array<{ name: string; template: Template }> {
+function synthesizeAllTemplates(env: 'prod'): Array<{ name: string; template: Template }> {
   const app = new cdk.App({ context: { env } });
   const envConfig = getEnvironmentConfig(env);
 
@@ -58,7 +58,7 @@ function synthesizeAllTemplates(env: 'dev' | 'prod'): Array<{ name: string; temp
 }
 
 describe('상시 과금 리소스 부재 (R11 / tasks 17.6)', () => {
-  for (const env of ['dev', 'prod'] as const) {
+  for (const env of ['prod'] as const) {
     describe(`${env} 환경`, () => {
       const templates = synthesizeAllTemplates(env);
 

@@ -9,7 +9,13 @@ import { isTestMode } from '@/lib/aws/testGuard';
  * - 필수 값이 없으면 **즉시 실패**한다. 기본값으로 조용히 넘어가지 않는다 (R1, R10).
  */
 
-export type AppEnv = 'dev' | 'prod' | 'test' | 'local';
+/**
+ * 앱이 인식하는 환경.
+ *
+ * 배포 대상은 **prod 하나뿐이다**(dev 환경은 존재하지 않는다).
+ * `local` 은 개발 머신, `test` 는 vitest·Playwright 실행이다.
+ */
+export type AppEnv = 'prod' | 'test' | 'local';
 
 export interface RuntimeConfig {
   env: AppEnv;

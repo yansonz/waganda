@@ -1,10 +1,14 @@
 /**
  * 환경 컨텍스트 헬퍼
- * dev/prod 환경 간 설정 분기를 담당한다
+ *
+ * 이 프로젝트는 **prod 하나만 배포한다.** dev 환경은 존재하지 않는다 —
+ * 개인 프로젝트이고 상시 과금 리소스를 두지 않기로 했으므로, 검증은 로컬
+ * (에뮬레이터 + 실제 Bedrock/Transcribe)에서 하고 배포 대상은 prod 뿐이다.
+ * `EnvironmentName` 을 넓히지 말 것.
  */
 import { RemovalPolicy } from 'aws-cdk-lib';
 
-export type EnvironmentName = 'dev' | 'prod';
+export type EnvironmentName = 'prod';
 
 export interface EnvironmentConfig {
   env: EnvironmentName;
@@ -16,30 +20,18 @@ export interface EnvironmentConfig {
 }
 
 export function getEnvironmentConfig(env: string): EnvironmentConfig {
-  if (env !== 'dev' && env !== 'prod') {
-    throw new Error(`Invalid environment: ${env}. Must be 'dev' or 'prod'.`);
+  if (env !== 'prod') {
+    throw new Error(`Invalid environment: ${env}. 이 프로젝트는 'prod' 만 배포한다.`);
   }
 
-  const baseConfig: Record<EnvironmentName, EnvironmentConfig> = {
-    dev: {
-      env: 'dev',
-      domain: 'waganda-dev.yanbert.com',
-      resourceSuffix: 'dev',
-      removalPolicy: RemovalPolicy.DESTROY, // 개발 환경에서는 삭제 가능
-      region: 'ap-northeast-2', // 서울 리전
-      account: undefined, // 배포 시점에 결정, 전용 계정 ID 필요
-    },
-    prod: {
-      env: 'prod',
-      domain: 'waganda.yanbert.com',
-      resourceSuffix: 'prod',
-      removalPolicy: RemovalPolicy.RETAIN, // 프로덕션에서는 데이터 보존
-      region: 'ap-northeast-2', // 서울 리전
-      account: undefined,
-    },
+  return {
+    env: 'prod',
+    domain: 'waganda.yanbert.com',
+    resourceSuffix: 'prod',
+    removalPolicy: RemovalPolicy.RETAIN, // 프로덕션에서는 데이터 보존
+    region: 'ap-northeast-2', // 서울 리전
+    account: undefined, // 배포 시점에 CLI 컨텍스트에서 결정
   };
-
-  return baseConfig[env];
 }
 
 /**

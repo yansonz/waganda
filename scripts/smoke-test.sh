@@ -4,7 +4,7 @@
 # design.md 검증 전략: 공개 페이지 200, 미인증 쓰기 API 401 + loginUrl, 에이전트 /ping 200.
 #
 # 사용법:
-#   BASE_URL=https://waganda-dev.yanbert.com AGENT_PING_URL=https://... scripts/smoke-test.sh
+#   BASE_URL=https://waganda.yanbert.com scripts/smoke-test.sh
 #   또는
 #   scripts/smoke-test.sh <BASE_URL> <AGENT_PING_URL>
 #

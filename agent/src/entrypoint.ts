@@ -37,7 +37,8 @@ import type { StatsInputTasting } from '@app/domain/types';
 import { deriveHourBucket, deriveWeekday } from '@app/domain/types';
 
 const PORT = Number(process.env['PORT'] ?? 8080);
-const ENV = process.env['WAGANDA_ENV'] ?? 'dev';
+// 배포 환경에서는 Runtime 환경변수로 항상 주입된다(`prod`). 기본값은 로컬 실행용이다.
+const ENV = process.env['WAGANDA_ENV'] ?? 'local';
 const MEDIA_BUCKET = process.env['MEDIA_BUCKET'] ?? '';
 const AUDIO_LAMBDA_FUNCTION_NAME = process.env['AUDIO_LAMBDA_FUNCTION_NAME'] ?? '';
 const CLOUDFRONT_DISTRIBUTION_ID = process.env['CLOUDFRONT_DISTRIBUTION_ID'] ?? '';

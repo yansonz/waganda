@@ -16,9 +16,9 @@ import { Tags } from 'aws-cdk-lib';
 describe('Data Stack Validation', () => {
   function createDataStack(): WagandaDataStack {
     const app = new cdk.App();
-    const envConfig = getEnvironmentConfig('dev');
+    const envConfig = getEnvironmentConfig('prod');
     Tags.of(app).add('Project', 'waganda');
-    Tags.of(app).add('Environment', 'dev');
+    Tags.of(app).add('Environment', 'prod');
 
     return new WagandaDataStack(app, 'DataStack', {
       stackName: 'test-data-stack',
@@ -140,12 +140,12 @@ describe('Data Stack Validation', () => {
     // 브라우저가 사전 서명 URL 로 직접 PUT 하므로 CORS 가 없으면 업로드가 막힌다.
     // 오리진을 `*` 로 열면 유출된 사전 서명 URL 을 다른 사이트에서 쓸 수 있다.
     template.hasResourceProperties('AWS::S3::Bucket', {
-      BucketName: 'waganda-media-dev',
+      BucketName: 'waganda-media-prod',
       CorsConfiguration: {
         CorsRules: [
           {
             AllowedMethods: ['PUT'],
-            AllowedOrigins: ['https://waganda-dev.yanbert.com'],
+            AllowedOrigins: ['https://waganda.yanbert.com'],
           },
         ],
       },

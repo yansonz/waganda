@@ -644,7 +644,7 @@ AWS Budgets는 `Project: waganda` 태그로 필터링해 다른 프로젝트 비
 
 ### 환경 분리
 
-`dev`와 `prod`를 동일 IaC로 배포한다. 리소스명에 환경 접미사를 붙이고, `dev`는 `waganda-dev.yanbert.com`을 쓴다. 시크릿은 환경별 SSM 파라미터에서 주입한다.
+**`prod` 하나만 배포한다.** 별도 dev 환경을 두지 않는다 — 상시 과금 리소스를 만들지 않기로 했고, 검증은 로컬(에뮬레이터 + 실제 Bedrock·Transcribe)에서 한다. 리소스명에는 `prod` 접미사를 붙이고 시크릿은 `/waganda/prod/*` SSM 파라미터에서 주입한다.
 
 ### 시크릿
 

@@ -16,9 +16,9 @@ import { Tags } from 'aws-cdk-lib';
 describe('Pipeline Stack Validation', () => {
   function createPipelineStack(): WagandaPipelineStack {
     const app = new cdk.App();
-    const envConfig = getEnvironmentConfig('dev');
+    const envConfig = getEnvironmentConfig('prod');
     Tags.of(app).add('Project', 'waganda');
-    Tags.of(app).add('Environment', 'dev');
+    Tags.of(app).add('Environment', 'prod');
 
     const dataStack = new WagandaDataStack(app, 'DataStack', {
       stackName: 'test-data-stack',
@@ -190,7 +190,7 @@ describe('Pipeline Stack Validation', () => {
     // AWS::BedrockAgentCore::Runtime 의 실제 스키마를 단정한다.
     // NetworkMode=PUBLIC 은 NAT 상시 과금을 피하기 위한 결정이다.
     template.hasResourceProperties('AWS::BedrockAgentCore::Runtime', {
-      AgentRuntimeName: 'waganda_agent_dev',
+      AgentRuntimeName: 'waganda_agent_prod',
       NetworkConfiguration: { NetworkMode: 'PUBLIC' },
       ProtocolConfiguration: 'HTTP',
       LifecycleConfiguration: {
@@ -207,9 +207,9 @@ describe('Pipeline Stack Validation', () => {
     // 에이전트는 lib/config.ts 의 getRuntimeConfig() 를 거치므로 이 값들이 없으면 즉시 실패한다.
     template.hasResourceProperties('AWS::BedrockAgentCore::Runtime', {
       EnvironmentVariables: cdk.assertions.Match.objectLike({
-        WAGANDA_ENV: 'dev',
-        WAGANDA_TABLE_NAME: 'waganda-dev',
-        WAGANDA_MEDIA_BUCKET: 'waganda-media-dev',
+        WAGANDA_ENV: 'prod',
+        WAGANDA_TABLE_NAME: 'waganda-prod',
+        WAGANDA_MEDIA_BUCKET: 'waganda-media-prod',
         // AgentCore Runtime 은 Lambda 와 달리 AWS_REGION 을 주지 않는다.
         // 없으면 SDK 클라이언트 생성에서 실패해 모든 분석 요청이 500 이 된다(실제로 겪었다).
         AWS_REGION: 'ap-northeast-2',

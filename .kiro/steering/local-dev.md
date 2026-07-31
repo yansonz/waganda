@@ -8,7 +8,7 @@ inclusion: always
 
 ```bash
 npm run dev          # DynamoDB Local + LocalStack S3 자동 기동 후 next dev
-npm run dev:login    # 로컬 편집자 세션 쿠키 발급 (dev/prod 환경에서는 실행 거부)
+npm run dev:login    # 로컬 편집자 세션 쿠키 발급 (prod 환경에서는 실행 거부)
 npm run db:reset     # 로컬 테이블 재생성 + 시드
 npm run analyze:local -- <tastingId>   # 분석 파이프라인 수동 실행
 ```

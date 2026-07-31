@@ -56,9 +56,9 @@ describe('Tagging Compliance', () => {
 
   it('should have Project=waganda tag on all taggable DynamoDB resources', () => {
     const app = new cdk.App();
-    const envConfig = getEnvironmentConfig('dev');
+    const envConfig = getEnvironmentConfig('prod');
     Tags.of(app).add('Project', 'waganda');
-    Tags.of(app).add('Environment', 'dev');
+    Tags.of(app).add('Environment', 'prod');
 
     const dataStack = new WagandaDataStack(app, 'DataStack', {
       stackName: 'test-data-stack',
@@ -79,9 +79,9 @@ describe('Tagging Compliance', () => {
 
   it('should have Project=waganda tag on all S3 buckets', () => {
     const app = new cdk.App();
-    const envConfig = getEnvironmentConfig('dev');
+    const envConfig = getEnvironmentConfig('prod');
     Tags.of(app).add('Project', 'waganda');
-    Tags.of(app).add('Environment', 'dev');
+    Tags.of(app).add('Environment', 'prod');
 
     const dataStack = new WagandaDataStack(app, 'DataStack', {
       stackName: 'test-data-stack',
@@ -102,9 +102,9 @@ describe('Tagging Compliance', () => {
 
   it('should have Project=waganda tag on all ECR repositories', () => {
     const app = new cdk.App();
-    const envConfig = getEnvironmentConfig('dev');
+    const envConfig = getEnvironmentConfig('prod');
     Tags.of(app).add('Project', 'waganda');
-    Tags.of(app).add('Environment', 'dev');
+    Tags.of(app).add('Environment', 'prod');
 
     const dataStack = new WagandaDataStack(app, 'DataStack', {
       stackName: 'test-data-stack',
@@ -125,9 +125,9 @@ describe('Tagging Compliance', () => {
 
   it('should have Project=waganda tag on SQS queues', () => {
     const app = new cdk.App();
-    const envConfig = getEnvironmentConfig('dev');
+    const envConfig = getEnvironmentConfig('prod');
     Tags.of(app).add('Project', 'waganda');
-    Tags.of(app).add('Environment', 'dev');
+    Tags.of(app).add('Environment', 'prod');
 
     const dataStack = new WagandaDataStack(app, 'DataStack', {
       stackName: 'test-data-stack',
@@ -154,9 +154,9 @@ describe('Tagging Compliance', () => {
 
   it('should have Project=waganda tag on Lambda functions', () => {
     const app = new cdk.App();
-    const envConfig = getEnvironmentConfig('dev');
+    const envConfig = getEnvironmentConfig('prod');
     Tags.of(app).add('Project', 'waganda');
-    Tags.of(app).add('Environment', 'dev');
+    Tags.of(app).add('Environment', 'prod');
 
     const dataStack = new WagandaDataStack(app, 'DataStack', {
       stackName: 'test-data-stack',
@@ -184,9 +184,9 @@ describe('Tagging Compliance', () => {
 
   it('should have Environment tag on all resources', () => {
     const app = new cdk.App();
-    const envConfig = getEnvironmentConfig('dev');
+    const envConfig = getEnvironmentConfig('prod');
     Tags.of(app).add('Project', 'waganda');
-    Tags.of(app).add('Environment', 'dev');
+    Tags.of(app).add('Environment', 'prod');
 
     const opsStack = new WagandaOpsStack(app, 'OpsStack', {
       stackName: 'test-ops-stack',
@@ -198,7 +198,7 @@ describe('Tagging Compliance', () => {
     // 로그 그룹 확인
     template.resourcePropertiesCountIs('AWS::Logs::LogGroup', {
       Tags: cdk.assertions.Match.arrayWith([
-        cdk.assertions.Match.objectLike({ Key: 'Environment', Value: 'dev' }),
+        cdk.assertions.Match.objectLike({ Key: 'Environment', Value: 'prod' }),
       ]),
     }, 1);
 

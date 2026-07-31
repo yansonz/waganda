@@ -12,8 +12,8 @@ import { getEnvironmentConfig, resourceNames } from '../lib/env';
 import { WagandaWebStack } from '../lib/web-stack';
 
 function synthWeb(certificateArn?: string): { template: Template; json: string } {
-  const app = new cdk.App({ context: { env: 'dev' } });
-  const envConfig = getEnvironmentConfig('dev');
+  const app = new cdk.App({ context: { env: 'prod' } });
+  const envConfig = getEnvironmentConfig('prod');
   const stack = new WagandaWebStack(app, 'WagandaWebStack', { envConfig, certificateArn });
   const template = Template.fromStack(stack);
   return { template, json: JSON.stringify(template.toJSON()) };
@@ -69,7 +69,7 @@ describe('WagandaWebStack', () => {
 
   it('정적 자산 버킷은 퍼블릭 접근이 전면 차단된다', () => {
     template.hasResourceProperties('AWS::S3::Bucket', {
-      BucketName: resourceNames(getEnvironmentConfig('dev')).staticBucket,
+      BucketName: resourceNames(getEnvironmentConfig('prod')).staticBucket,
       PublicAccessBlockConfiguration: {
         BlockPublicAcls: true,
         BlockPublicPolicy: true,
@@ -148,7 +148,7 @@ describe('WagandaWebStack', () => {
     );
     withCert.hasResourceProperties('AWS::CloudFront::Distribution', {
       DistributionConfig: Match.objectLike({
-        Aliases: ['waganda-dev.yanbert.com'],
+        Aliases: ['waganda.yanbert.com'],
       }),
     });
   });
@@ -186,7 +186,7 @@ describe('WagandaWebStack', () => {
     // 클라이언트가 응답을 해석하지 못하고 빈 화면이 된다(실제로 겪었다).
     template.hasResourceProperties('AWS::CloudFront::CachePolicy', {
       CachePolicyConfig: Match.objectLike({
-        Name: 'waganda-public-dev',
+        Name: 'waganda-public-prod',
         ParametersInCacheKeyAndForwardedToOrigin: Match.objectLike({
           QueryStringsConfig: { QueryStringBehavior: 'all' },
           HeadersConfig: Match.objectLike({

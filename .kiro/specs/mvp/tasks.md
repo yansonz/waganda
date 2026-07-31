@@ -25,10 +25,10 @@
   - **2.4 는 1차 실측을 마쳤고 경고가 나왔다**: 실제 녹음 1건에서 Transcribe 가 화자를 1명으로 판정해
     화자 기반 기능(반응 일치도·화자 대비)이 성립하지 않았다. 두 사람이 번갈아 말하는 녹음으로 재측정이 필요하다.
     측정은 `npm run analyze:local -- <tastingId>` 로 배포 없이 가능하다.
-- 17.2 도메인 연결, 17.5 dev/prod 분리 배포 확인 (`cdk synth` 는 dev·prod 모두 성공)
+- 17.2 도메인 연결 (`cdk synth` 성공). dev 환경은 만들지 않기로 결정했다.
 - 18.6 실제 시음 전체 흐름 수동 검증, 18.7 배포 후 실제 비용 확인
 
-검증 현황: 루트 vitest 429건 · agent 44건 · infrastructure 88건 · audio pytest 37건 · Playwright E2E 66건(DynamoDB Local) 전부 통과, `tsc --noEmit` 0건, `eslint` 0건, `next build` 및 `cdk synth --all`(dev·prod) 성공.
+검증 현황: 루트 vitest 429건 · agent 44건 · infrastructure 88건 · audio pytest 37건 · Playwright E2E 66건(DynamoDB Local) 전부 통과, `tsc --noEmit` 0건, `eslint` 0건, `next build` 및 `cdk synth --all` 성공.
 
 ---
 
@@ -219,7 +219,7 @@
   - [ ] 17.2 도메인 연결 — `waganda` 계정의 `waganda.yanbert.com` 호스팅 존 조회, us-east-1에 ACM 인증서 신규 발급(DNS 검증, 위임 완료 후 자동), CloudFront에 연결하고 A/AAAA 별칭 생성
   - [x] 17.3 `infrastructure/lib/ops-stack.ts` — 로그 그룹(14일 보관), `Project: waganda` 태그로 필터링한 AWS Budgets, SNS 알림 토픽, 실패율·지연시간·스키마 검증 실패율 알람
   - [x] 17.4 SSM Parameter Store SecureString 파라미터 정의(Google 클라이언트 ID/시크릿, JWT 서명 키, 허용 목록). Secrets Manager 미사용
-  - [ ] 17.5 `dev`/`prod` 환경 분리 배포 확인 — `waganda-dev.yanbert.com` 포함
+  - [x] 17.5 ~~dev/prod 분리 배포~~ — dev 환경을 두지 않기로 결정(prod 단독 배포)
   - [x] 17.6 상시 과금 리소스 부재 검증 — ALB·NAT 게이트웨이·상시 컨테이너·프로비저닝 DB가 합성 결과에 없는지 `cdk synth` 산출물로 확인하는 테스트 작성
   - [x] 17.7 태깅 검증 — `cdk synth` 산출물의 모든 태깅 가능 리소스에 `Project: waganda`가 부여되었는지 확인하는 테스트 작성. 비용 격리는 계정 경계가 1차 수단이며 태그는 조직 전체 조회용임을 전제로, 배포 후 Cost Explorer에서 계정·태그 양쪽 조회를 확인
   - _Requirements: 11_
