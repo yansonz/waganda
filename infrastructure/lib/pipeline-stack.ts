@@ -175,14 +175,40 @@ export class WagandaPipelineStack extends Stack {
     );
 
     // DynamoDB 테이블 읽기/쓰기 (분석 결과 저장)
+    // `PutItem` 이 필요하다 — 분석 결과·발견 카드는 새 아이템으로 생성된다.
     agentCoreExecutionRole.addToPrincipalPolicy(
       new iam.PolicyStatement({
         sid: 'DynamoDBAccess',
-        actions: ['dynamodb:GetItem', 'dynamodb:UpdateItem', 'dynamodb:Query', 'dynamodb:Scan'],
+        actions: [
+          'dynamodb:GetItem',
+          'dynamodb:PutItem',
+          'dynamodb:UpdateItem',
+          'dynamodb:Query',
+          'dynamodb:Scan',
+        ],
         resources: [
           `arn:aws:dynamodb:${envConfig.region}:${this.account}:table/${names.table}`,
           `arn:aws:dynamodb:${envConfig.region}:${this.account}:table/${names.table}/index/*`,
         ],
+      }),
+    );
+
+    // 음향 특징 추출 Lambda 호출 (`extract_acoustic` 단계).
+    // 이 권한이 없으면 전사까지 진행한 뒤 그 단계에서 멈춘다.
+    agentCoreExecutionRole.addToPrincipalPolicy(
+      new iam.PolicyStatement({
+        sid: 'InvokeAudioLambda',
+        actions: ['lambda:InvokeFunction'],
+        resources: [audioLambda.functionArn],
+      }),
+    );
+
+    // 분석 결과 게시 후 공개 페이지 캐시를 무효화한다(`persist_and_publish` 단계).
+    agentCoreExecutionRole.addToPrincipalPolicy(
+      new iam.PolicyStatement({
+        sid: 'CloudFrontInvalidate',
+        actions: ['cloudfront:CreateInvalidation'],
+        resources: [`arn:aws:cloudfront::${this.account}:distribution/*`],
       }),
     );
 
@@ -326,7 +352,9 @@ export class WagandaPipelineStack extends Stack {
 
     // DynamoDB 쓰기 권한
     const tastingTable = dynamodb.Table.fromTableName(this, 'TastingTableRef', names.table);
-    tastingTable.grantWriteData(triggerUploadRole);
+    // job 레코드를 **읽고** 갱신한다(이미 진행 중인 분석을 중복 시작하지 않기 위해 조회한다).
+    // 쓰기 권한만 주면 GetItem 이 AccessDenied 로 실패해 트리거가 죽는다.
+    tastingTable.grantReadWriteData(triggerUploadRole);
 
     // AgentCore InvokeAgentRuntime 권한
     // 런타임 ARN 자체와 그 하위 엔드포인트를 모두 대상으로 한다.
@@ -351,7 +379,13 @@ export class WagandaPipelineStack extends Stack {
         memorySize: 512,
         architecture: lambda.Architecture.ARM_64,
         bundling: {
-          externalModules: ['@aws-sdk'],
+          /*
+           * Lambda 런타임이 제공하는 SDK 만 external 로 둔다.
+           * `@aws-sdk/client-bedrock-agentcore` 는 런타임에 포함되지 않으므로
+           * 번들에 넣어야 한다(`@aws-sdk` 전체를 external 로 두면 실행 시
+           * 모듈을 찾지 못해 트리거가 실패한다).
+           */
+          externalModules: ['@aws-sdk/client-dynamodb', '@aws-sdk/util-dynamodb'],
           minify: true,
           sourceMap: false,
         },
@@ -379,6 +413,15 @@ export class WagandaPipelineStack extends Stack {
 
     tastingTable.grantReadWriteData(triggerTranscribeRole);
 
+    // 전사 완료 후 세션 B 를 호출한다(세션 A 와 같은 sessionId 로 상태를 이어받는다).
+    triggerTranscribeRole.addToPrincipalPolicy(
+      new iam.PolicyStatement({
+        sid: 'InvokeAgentRuntime',
+        actions: ['bedrock-agentcore:InvokeAgentRuntime'],
+        resources: [this.agentCoreRuntimeArn, `${this.agentCoreRuntimeArn}/runtime-endpoint/*`],
+      }),
+    );
+
     const triggerTranscribeLambda = new lambda_nodejs.NodejsFunction(
       this,
       'TriggerTranscribeLambda',
@@ -392,23 +435,35 @@ export class WagandaPipelineStack extends Stack {
         memorySize: 512,
         architecture: lambda.Architecture.ARM_64,
         bundling: {
-          externalModules: ['@aws-sdk'],
+          /*
+           * Lambda 런타임이 제공하는 SDK 만 external 로 둔다.
+           * `@aws-sdk/client-bedrock-agentcore` 는 런타임에 포함되지 않으므로
+           * 번들에 넣어야 한다(`@aws-sdk` 전체를 external 로 두면 실행 시
+           * 모듈을 찾지 못해 트리거가 실패한다).
+           */
+          externalModules: ['@aws-sdk/client-dynamodb', '@aws-sdk/util-dynamodb'],
           minify: true,
           sourceMap: false,
         },
         environment: {
           TABLE_NAME: names.table,
           ENVIRONMENT: envConfig.env,
+          WAGANDA_AGENT_RUNTIME_ARN: this.agentCoreRuntimeArn,
         },
       },
     );
 
     // EventBridge 규칙 (Transcribe Job State Change)
+    //
+    // `detailType` 은 **`Transcribe Job State Change`** 다(문서상 항상 이 값이다).
+    // `Transcription Job State Change` 로 적어 두었더니 규칙에 매칭되는 이벤트가 0건이었고,
+    // 전사가 COMPLETED 가 되어도 세션 B 가 시작되지 않아 분석이 `transcribing` 에서 멈췄다.
+    // 트리거 Lambda 는 로그 그룹조차 생기지 않아 원인을 찾기 어려웠다.
     const transcribeEventRule = new events.Rule(this, 'TranscribeEventRule', {
       ruleName: `waganda-transcribe-complete-${envConfig.resourceSuffix}`,
       eventPattern: {
         source: ['aws.transcribe'],
-        detailType: ['Transcription Job State Change'],
+        detailType: ['Transcribe Job State Change'],
         detail: {
           TranscriptionJobStatus: ['COMPLETED', 'FAILED'],
         },

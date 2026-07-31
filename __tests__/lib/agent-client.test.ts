@@ -91,12 +91,18 @@ describe('invokeAgentRuntime — 주입된 invoker 를 통해서만 AWS 를 호�
     expect(callArg.limits.maxIterations).toBe(12);
   });
 
-  it('invoker 가 주입되지 않으면 실패한다', async () => {
+  it('invoker 가 주입되지 않으면 실제 구현을 쓰고, 테스트 모드에서는 차단된다', async () => {
+    /*
+     * 기본 구현이 없던 때에는 "AgentRuntimeInvoker 가 설정되지 않았습니다" 로 실패했고,
+     * 프로덕션에서 주입하는 코드도 없어 녹음 분석이 아예 시작되지 않았다.
+     * 이제 주입이 없으면 실제 `InvokeAgentRuntime` 을 호출한다 —
+     * 테스트에서는 과금 가드가 막아야 한다(요금 발생 호출을 테스트에서 하지 않는다).
+     */
     process.env.WAGANDA_AGENT_RUNTIME_ARN = 'arn:aws:bedrock-agentcore:test';
     resetAgentRuntimeInvoker();
 
     await expect(
       invokeAgentRuntime('t1', { task: 'analyze_label', imageKey: 'k1' }),
-    ).rejects.toThrow(/AgentRuntimeInvoker/);
+    ).rejects.toThrow(/테스트 모드/);
   });
 });

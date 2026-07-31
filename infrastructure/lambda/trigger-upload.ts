@@ -14,8 +14,28 @@ import {
   UpdateItemCommand,
 } from '@aws-sdk/client-dynamodb';
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
+import {
+  BedrockAgentCoreClient,
+  InvokeAgentRuntimeCommand,
+} from '@aws-sdk/client-bedrock-agentcore';
 
 const dynamoDb = new DynamoDBClient({});
+const agentCore = new BedrockAgentCoreClient({});
+
+/** AgentCore 응답 본문(스트림 또는 바이트)을 문자열로 모은다 */
+async function readAgentResponse(body: unknown): Promise<string> {
+  if (typeof body === 'string') return body;
+  if (body instanceof Uint8Array) return new TextDecoder().decode(body);
+  const maybeStream = body as { transformToString?: () => Promise<string> };
+  if (typeof maybeStream.transformToString === 'function') {
+    return await maybeStream.transformToString();
+  }
+  const chunks: Buffer[] = [];
+  for await (const chunk of body as AsyncIterable<Uint8Array>) {
+    chunks.push(Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks).toString('utf8');
+}
 
 interface SqsRecord {
   Records: Array<{
@@ -42,12 +62,13 @@ function generateSessionId(tastingId: string, env: string): string {
   // 형식: waganda-tasting-<tastingId>-<env>
   // 33자 이상 보장
   const sessionId = `waganda-tasting-${tastingId}-${env}`;
-  
-  if (sessionId.length < 33) {
-    throw new Error(`Session ID must be at least 33 characters. Generated: ${sessionId.length} chars`);
-  }
-  
-  return sessionId;
+
+  /*
+   * AgentCore 최소 세션 ID 길이는 33자다. 앱(`lib/agent/client.ts` 의
+   * `buildRuntimeSessionId`)은 부족하면 `0` 으로 패딩한다 — 세션 A/B 가 같은 세션을
+   * 공유해야 하므로 **여기서도 같은 방식으로** 맞춘다(예전에는 예외를 던져 규칙이 어긋났다).
+   */
+  return sessionId.length >= 33 ? sessionId : sessionId.padEnd(33, '0');
 }
 
 export async function handler(event: SqsRecord) {
@@ -150,24 +171,43 @@ export async function handler(event: SqsRecord) {
 
       console.log(`Job status updated to 'transcribing' for tasting ${tastingId}`);
 
-      // AgentCore Runtime 호출 (세션 A)
-      // 주의: 실제 구현에서는 BedrockAgentRuntime 클라이언트 필요
-      // - InvokeAgentRuntime 호출
-      // - sessionId: ${sessionId}
-      // - agentAliasId: <에이전트 ID>
-      // - actionGroupsState: 활성
-      // - inputText: "start_transcription" (시작 명령)
+      /*
+       * AgentCore Runtime 호출 (세션 A: 전사 시작 → 음향 특징 추출).
+       *
+       * 예전에는 이 자리에 호출 대신 로그만 남기는 자리표시자가 있었다. job 레코드만 만들고
+       * 분석을 시작하지 않아 상태가 `queued`·`transcribing` 에서 영구히 멈췄다.
+       *
+       * 세션 ID 는 앱(`lib/agent/client.ts`)과 **같은 규칙**으로 만들어야 세션 A/B 가
+       * 같은 세션을 공유한다.
+       */
+      const agentRuntimeArn = process.env.WAGANDA_AGENT_RUNTIME_ARN;
+      if (!agentRuntimeArn) {
+        throw new Error('설정 누락: WAGANDA_AGENT_RUNTIME_ARN 이 필요합니다.');
+      }
 
-      console.log(`Would invoke AgentCore Runtime with sessionId: ${sessionId}`);
-      // const bedrockClient = new BedrockAgentRuntimeClient({});
-      // const response = await bedrockClient.send(
-      //   new InvokeAgentCommand({
-      //     agentId: process.env.AGENT_ID!,
-      //     agentAliasId: process.env.AGENT_ALIAS_ID!,
-      //     sessionId,
-      //     inputText: 'start_transcription',
-      //   }),
-      // );
+      const payload = {
+        task: 'analyze_upload' as const,
+        tastingId,
+        recordingId,
+        audioKey: objectKey,
+      };
+
+      const invokeResponse = await agentCore.send(
+        new InvokeAgentRuntimeCommand({
+          agentRuntimeArn,
+          runtimeSessionId: sessionId,
+          payload: new TextEncoder().encode(JSON.stringify(payload)),
+          contentType: 'application/json',
+          accept: 'application/json',
+        }),
+      );
+
+      const responseBody = invokeResponse.response
+        ? await readAgentResponse(invokeResponse.response)
+        : '';
+      console.log(
+        `AgentCore invoked: sessionId=${sessionId} response=${responseBody.slice(0, 300)}`,
+      );
 
     } catch (error) {
       console.error('Error processing SQS record:', error);

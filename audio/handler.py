@@ -166,7 +166,12 @@ def _parse_input(event: Dict[str, Any]) -> tuple[Optional[str], Optional[str], O
       {"bucket": "...", "key": "..."}
       {"audioKey": "...", "bucket": "..."}  (bucket 생략 시 환경변수 MEDIA_BUCKET 사용)
     """
-    bucket = event.get("bucket") or os.environ.get("MEDIA_BUCKET")
+    # 인프라(`infrastructure/lib/pipeline-stack.ts`)가 주입하는 이름은 MEDIA_BUCKET_NAME 이다.
+    # 예전에는 MEDIA_BUCKET 을 읽어 항상 비어 있었고, 그 결과 오류 dict 를 돌려주어
+    # 호출자(에이전트)가 Acoustic 스키마 검증에서 실패했다(rmsCurve 없음).
+    bucket = event.get("bucket") or os.environ.get("MEDIA_BUCKET_NAME") or os.environ.get(
+        "MEDIA_BUCKET"
+    )
     key = event.get("key") or event.get("audioKey")
 
     if not bucket or not key:

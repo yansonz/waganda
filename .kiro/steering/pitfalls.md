@@ -104,6 +104,26 @@ inclusion: always
   같은 디렉토리로 빌드하면 청크가 섞여 `a[d] is not a function` 이 난다.
 - `robots.ts` 같은 메타데이터 라우트는 빌드 시점에 런타임 설정을 요구하면 안 된다.
 
+## 분석 파이프라인 배선
+
+키·이름 규약이 **네 곳**에 흩어져 있어 전부 어긋나 있었다. 분석이 조용히 멈추고 화면에는
+상태만 남으므로, 규약을 바꿀 때는 아래를 함께 확인한다(각각 계약 테스트로 고정해 두었다).
+
+- S3 이벤트 알림 프리픽스 = `MEDIA_KEY_PREFIX.recordings`(`@waganda/schemas`).
+  `audio/` 로 걸려 있어 이벤트가 **아예 발생하지 않았다**(트리거 Lambda 로그 그룹이 비어 있으면
+  이 경우다).
+- 트리거 Lambda 의 S3 키 파싱 = `recordings/<tastingId>/<recordingId>.<format>`.
+- **Transcribe EventBridge `detail-type` 은 `Transcribe Job State Change`** 다.
+  `Transcription Job State Change` 로 적으면 규칙 매칭이 0건이 된다
+  (`AWS/Events` 의 `MatchedEvents` 지표로 확인한다).
+- Transcribe 작업명 = `waganda-<tastingId>-<recordingId>`. 두 값이 UUID 라 `[^-]+` 로는
+  파싱되지 않는다. `recordingId` 도 함께 넘겨야 세션 B 가 진행된다.
+- audio Lambda 는 `MEDIA_BUCKET_NAME` 을 읽는다(인프라 주입 이름과 일치해야 한다).
+  어긋나면 오류 dict 를 돌려주고 호출자는 `rmsCurve` 없다는 스키마 오류로만 본다.
+- 두 트리거 Lambda 는 실제로 `InvokeAgentRuntime` 을 호출해야 한다. 예전에는 로그만 남기는
+  자리표시자였다. `@aws-sdk/client-bedrock-agentcore` 는 Lambda 런타임에 없으므로
+  번들에 포함해야 한다(`externalModules` 에서 `@aws-sdk` 전체를 제외하면 실행 시 죽는다).
+
 ## 미디어 서빙 (`/media/*`)
 
 - **CloudFront 는 요청 경로를 그대로 S3 키로 쓴다.** `/media/labels/x.jpg` 는

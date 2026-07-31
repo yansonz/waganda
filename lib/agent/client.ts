@@ -9,11 +9,16 @@
  * (테스트에서 vi.fn() 등으로 스텁 가능하게 하기 위함 — design.md 규약).
  */
 import {
+  BedrockAgentCoreClient,
+  InvokeAgentRuntimeCommand,
+} from '@aws-sdk/client-bedrock-agentcore';
+import {
+  AgentInvocationResult,
   MIN_RUNTIME_SESSION_ID_LENGTH,
   type AgentInvocation,
-  type AgentInvocationResult,
 } from '@waganda/schemas';
 import { getRuntimeConfig } from '@/lib/config';
+import { assertExternalCallAllowed } from '@/lib/aws/testGuard';
 
 /** 세션 ID 패딩에 쓰는 문자 — 식별에 방해되지 않는 안전한 문자 */
 const PAD_CHAR = '0';
@@ -76,15 +81,70 @@ export function resetAgentRuntimeInvoker(): void {
   invoker = undefined;
 }
 
-/** 기본 invoker — 실제 AWS 호출은 별도 어댑터(agent 워크스페이스 등)에서 구현해 주입한다 */
-function getInvoker(): AgentRuntimeInvoker {
-  if (!invoker) {
-    throw new Error(
-      'AgentRuntimeInvoker 가 설정되지 않았습니다. setAgentRuntimeInvoker() 로 구현체를 주입하세요.',
-    );
-  }
-  return invoker;
+/**
+ * 실제 `InvokeAgentRuntime` 호출 구현.
+ *
+ * 주입된 스텁이 없으면 이것을 쓴다. 예전에는 기본 구현이 없어
+ * "AgentRuntimeInvoker 가 설정되지 않았습니다" 로 즉시 실패했고, 프로덕션에서 주입하는
+ * 코드도 없었다 — 즉 녹음 분석이 아예 시작되지 않았다.
+ *
+ * 테스트에서는 `assertExternalCallAllowed` 가 막으므로 실수로 실호출되지 않는다.
+ */
+function createRealInvoker(): AgentRuntimeInvoker {
+  return {
+    async invoke({ agentRuntimeArn, runtimeSessionId, payload }) {
+      assertExternalCallAllowed('AgentCore InvokeAgentRuntime');
+
+      const client = new BedrockAgentCoreClient({ region: getRuntimeConfig().region });
+      const response = await client.send(
+        new InvokeAgentRuntimeCommand({
+          agentRuntimeArn,
+          runtimeSessionId,
+          // 런타임은 이 바이트를 그대로 컨테이너의 `POST /invocations` 본문으로 전달한다.
+          payload: new TextEncoder().encode(JSON.stringify(payload)),
+          contentType: 'application/json',
+          accept: 'application/json',
+        }),
+      );
+
+      const raw = response.response ? await collectResponseBody(response.response) : '';
+      if (!raw) {
+        throw new Error('AgentCore 응답이 비어 있습니다.');
+      }
+
+      const parsed: unknown = JSON.parse(raw);
+      return AgentInvocationResult.parse(parsed);
+    },
+  };
 }
+
+/** SDK 응답 본문(스트림 또는 바이트)을 문자열로 모은다 */
+async function collectResponseBody(body: unknown): Promise<string> {
+  if (typeof body === 'string') return body;
+  if (body instanceof Uint8Array) return new TextDecoder().decode(body);
+
+  // SdkStream — transformToString 을 제공한다
+  const maybeStream = body as { transformToString?: () => Promise<string> };
+  if (typeof maybeStream.transformToString === 'function') {
+    return await maybeStream.transformToString();
+  }
+
+  // 마지막 수단: async iterable 로 취급한다
+  const chunks: Uint8Array[] = [];
+  for await (const chunk of body as AsyncIterable<Uint8Array>) {
+    chunks.push(chunk);
+  }
+  return new TextDecoder().decode(Buffer.concat(chunks.map((c) => Buffer.from(c))));
+}
+
+/** 주입된 스텁이 있으면 그것을, 없으면 실제 구현을 쓴다 */
+function getInvoker(): AgentRuntimeInvoker {
+  if (invoker) return invoker;
+  realInvoker ??= createRealInvoker();
+  return realInvoker;
+}
+
+let realInvoker: AgentRuntimeInvoker | undefined;
 
 /**
  * `InvokeAgentRuntime` 래퍼.

@@ -59,7 +59,7 @@ describe('Pipeline Stack Validation', () => {
     template.hasResourceProperties('AWS::Events::Rule', {
       EventPattern: {
         source: ['aws.transcribe'],
-        'detail-type': ['Transcription Job State Change'],
+        'detail-type': ['Transcribe Job State Change'],
         detail: {
           TranscriptionJobStatus: ['COMPLETED', 'FAILED'],
         },
