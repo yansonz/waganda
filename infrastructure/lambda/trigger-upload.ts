@@ -68,15 +68,27 @@ export async function handler(event: SqsRecord) {
       }
 
       const objectKey = s3Record.s3.object.key;
-      
-      // audio/tasting-<tastingId>/rec-<recordingId>.mp3 형식 가정
-      const match = objectKey.match(/audio\/tasting-([^/]+)\/rec-/);
+
+      /*
+       * 키 규약은 `lib/upload/presign.ts` 의 `buildAudioKey` 다:
+       *   recordings/<tastingId>/<recordingId>.<format>
+       *
+       * 예전에는 `audio/tasting-<id>/rec-<id>.mp3` 를 가정해 파싱이 항상 실패했고,
+       * 분석이 `queued` 에서 멈춘 채 로그에만 경고가 남았다.
+       * 프리픽스와 세그먼트 수를 함께 확인해 형식이 바뀌면 즉시 드러나게 한다.
+       */
+      const match = objectKey.match(/^recordings\/([^/]+)\/([^/]+)\.[^.]+$/);
       if (!match) {
-        console.warn(`Could not parse tastingId from key: ${objectKey}`);
+        console.warn(
+          `Could not parse tastingId from key: ${objectKey} ` +
+            '(expected recordings/<tastingId>/<recordingId>.<format>)',
+        );
         continue;
       }
 
       const tastingId = match[1];
+      const recordingId = match[2];
+      console.log(`parsed key: tastingId=${tastingId} recordingId=${recordingId}`);
       const sessionId = generateSessionId(tastingId, environment);
 
       // Job 레코드 조회 또는 생성

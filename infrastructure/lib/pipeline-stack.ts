@@ -77,11 +77,20 @@ export class WagandaPipelineStack extends Stack {
       names.mediaBucket,
     );
 
-    // audio/ 프리픽스로 제한된 S3 업로드 이벤트를 SQS로 알림
+    /*
+     * 녹음 업로드를 SQS 로 알린다.
+     *
+     * 프리픽스는 **`lib/upload/presign.ts` 의 키 규약과 반드시 일치해야 한다.**
+     * 녹음 키는 `recordings/<tastingId>/<recordingId>.<format>` 이다.
+     * 예전에는 `audio/` 로 걸려 있어서 이벤트가 전혀 발생하지 않았고, 분석이 `queued` 에서
+     * 멈춘 채 트리거 Lambda 가 한 번도 실행되지 않았다(로그 그룹이 비어 있었다).
+     *
+     * 라벨 사진(`labels/`)은 업로드 즉시 동기 인식을 하므로 이 알림 대상이 아니다.
+     */
     mediaBucket.addEventNotification(
       s3.EventType.OBJECT_CREATED,
       new s3_notifications.SqsDestination(this.queue),
-      { prefix: 'audio/' }, // audio/ 폴더 내 파일만 모니터링
+      { prefix: 'recordings/' },
     );
 
     // 오디오 Lambda (컨테이너, ARM64)

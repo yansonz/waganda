@@ -9,6 +9,7 @@ import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { getRuntimeConfig } from '@/lib/config';
 import { assertExternalCallAllowed } from '@/lib/aws/testGuard';
+import { MEDIA_KEY_PREFIX } from '@waganda/schemas';
 
 /** 사전 서명 URL 발급 기본 만료 시간(초) */
 export const PRESIGN_EXPIRES_IN_SEC = 900;
@@ -95,7 +96,7 @@ const CONTENT_TYPE_BY_FORMAT: Record<string, string> = {
 
 /** 녹음 업로드용 S3 키를 생성한다 (media 버킷의 `recordings/` 프리픽스) */
 export function buildAudioKey(tastingId: string, recordingId: string, format: string): string {
-  return `recordings/${tastingId}/${recordingId}.${format}`;
+  return `${MEDIA_KEY_PREFIX.recordings}${tastingId}/${recordingId}.${format}`;
 }
 
 /** 녹음 업로드용 사전 서명 URL을 발급한다 */
@@ -132,7 +133,7 @@ export const MAX_LABEL_IMAGE_BYTES = 10 * 1024 * 1024;
 
 /** 라벨 사진 업로드용 S3 키 (media 버킷의 `labels/` 프리픽스) */
 export function buildLabelImageKey(imageId: string, extension: string): string {
-  return `labels/${imageId}.${extension}`;
+  return `${MEDIA_KEY_PREFIX.labels}${imageId}.${extension}`;
 }
 
 /**

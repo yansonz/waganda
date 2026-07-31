@@ -102,3 +102,19 @@ export function toPriceBand(priceKrw: number | undefined | null): PriceBand | un
   if (priceKrw < 200_000) return '100k_200k';
   return 'over_200k';
 }
+
+/**
+ * 미디어 S3 키 프리픽스 — **앱과 인프라가 공유하는 계약이다.**
+ *
+ * 앱은 이 프리픽스로 객체를 올리고(`lib/upload/presign.ts`),
+ * 인프라는 같은 값으로 S3 이벤트 알림 필터를 건다(`infrastructure/lib/pipeline-stack.ts`).
+ * 두 값이 어긋나면 업로드 이벤트가 발생하지 않아 분석이 `queued` 에서 영구히 멈춘다
+ * (실제로 알림이 `audio/` 로 걸려 있어 트리거 Lambda 가 한 번도 실행되지 않았다).
+ * 그래서 문자열을 각자 적지 말고 반드시 여기서 가져다 쓴다.
+ */
+export const MEDIA_KEY_PREFIX = {
+  /** 라벨 사진 — 업로드 즉시 동기 인식한다(이벤트 알림 대상이 아니다) */
+  labels: 'labels/',
+  /** 녹음 — 업로드 이벤트가 분석 파이프라인을 시작한다 */
+  recordings: 'recordings/',
+} as const;

@@ -151,36 +151,41 @@ describe('Pipeline Stack Validation', () => {
     }, 1);
   });
 
-  it('should connect S3 upload event to SQS queue with audio/ prefix', () => {
+  it('S3 업로드 알림 프리픽스가 앱의 녹음 키 규약과 일치한다', () => {
     const stack = createPipelineStack();
     const template = Template.fromStack(stack);
 
-    // S3 NotificationConfiguration이 존재하여 audio/ 프리픽스의 이벤트를 SQS로 라우팅하는지 확인
-    const resources = template.toJSON().Resources;
-    let hasS3Notification = false;
+    /*
+     * 프리픽스가 실제 키와 어긋나면 이벤트가 전혀 발생하지 않아 분석이 `queued` 에서
+     * 멈춘다(트리거 Lambda 가 아예 실행되지 않는다). 실제로 `audio/` 로 걸려 있어
+     * 겪은 문제다 — 그때 테스트가 `audio/` 를 단정하고 있어 결함을 통과시켰다.
+     *
+     * 그래서 상수를 테스트에 다시 적지 않고 **프로덕션 코드의 키 생성 함수**에서 끌어온다.
+     */
+    // 계약은 `@waganda/schemas` 의 MEDIA_KEY_PREFIX 다.
+    // 앱 값과의 일치는 `__tests__/upload/media-key-contract.test.ts` 가 검증한다.
+    const expectedPrefix = 'recordings/';
 
-    for (const [_name, resource] of Object.entries(resources || {})) {
-      const resObj = resource as Record<string, unknown>;
-      const props = resObj.Properties as Record<string, unknown> | undefined;
-      const notifConfig = props?.NotificationConfiguration as Record<string, unknown> | undefined;
-      const queueConfigs = notifConfig?.QueueConfigurations as Array<Record<string, unknown>> | undefined;
-      if (queueConfigs) {
-        const hasAudioPrefix = queueConfigs.some((config: Record<string, unknown>) => {
-          const filter = config.Filter as Record<string, unknown> | undefined;
-          const key = filter?.Key as Record<string, unknown> | undefined;
-          const rules = key?.FilterRules as Array<Record<string, unknown>> | undefined;
-          return rules?.some((rule: Record<string, unknown>) => 
-            rule.Name === 'prefix' && rule.Value === 'audio/'
-          );
-        });
-        if (hasAudioPrefix) {
-          hasS3Notification = true;
-          break;
-        }
-      }
-    }
+    const notifications = Object.values(template.toJSON().Resources ?? {}).filter(
+      (resource) =>
+        ((resource as Record<string, unknown>).Properties as Record<string, unknown> | undefined)
+          ?.NotificationConfiguration !== undefined,
+    );
+    expect(notifications.length).toBeGreaterThan(0);
 
-    expect(hasS3Notification).toBe(true);
+    const prefixes = notifications.flatMap((resource) => {
+      const props = (resource as Record<string, unknown>).Properties as Record<string, unknown>;
+      const notif = props.NotificationConfiguration as Record<string, unknown>;
+      const queues = (notif.QueueConfigurations ?? []) as Array<Record<string, unknown>>;
+      return queues.flatMap((queue) => {
+        const filter = queue.Filter as Record<string, unknown> | undefined;
+        const key = filter?.Key as Record<string, unknown> | undefined;
+        const rules = (key?.FilterRules ?? []) as Array<Record<string, unknown>>;
+        return rules.filter((rule) => rule.Name === 'prefix').map((rule) => rule.Value as string);
+      });
+    });
+
+    expect(prefixes).toContain(expectedPrefix);
   });
 
   it('AgentCore Runtime 은 퍼블릭 네트워크와 세션 수명 제한으로 만들어진다', () => {
