@@ -69,6 +69,27 @@ export class WagandaDataStack extends Stack {
       removalPolicy: envConfig.removalPolicy,
       autoDeleteObjects: envConfig.removalPolicy === RemovalPolicy.DESTROY,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL, // 퍼블릭 접근 차단
+      /**
+       * 브라우저가 **사전 서명 URL 로 직접** 올리기 때문에 CORS 가 필요하다
+       * (라벨 사진·녹음 파일은 서버를 거치지 않고 S3 로 간다 — `lib/upload/presign.ts`).
+       * 규칙이 없으면 preflight 가 막혀 업로드가 네트워크 오류로 실패한다
+       * ("사진 저장소에 연결하지 못했습니다").
+       *
+       * 읽기는 CloudFront(OAC)를 통하므로 여기서는 업로드에 필요한 것만 허용한다.
+       * 오리진은 서비스 도메인으로 한정한다 — 사전 서명 URL 이 유출돼도 다른 사이트에서
+       * 브라우저를 통해 쓰지 못하게 막는다.
+       */
+      cors: [
+        {
+          allowedOrigins: [`https://${envConfig.domain}`],
+          allowedMethods: [s3.HttpMethods.PUT],
+          // 사전 서명 PUT 은 Content-Type 을 보내고, 브라우저가 preflight 에서 확인한다.
+          allowedHeaders: ['content-type'],
+          // 업로드 성공 확인에 쓰는 최소 응답 헤더만 노출한다.
+          exposedHeaders: ['ETag'],
+          maxAge: 3000,
+        },
+      ],
     });
 
     // 정적 자산 S3 버킷

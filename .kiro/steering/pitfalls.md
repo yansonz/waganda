@@ -97,6 +97,11 @@ inclusion: always
 
 ## S3 / 업로드
 
+- **미디어 버킷에 CORS 규칙이 있어야 한다.** 브라우저가 사전 서명 URL 로 S3 에 직접 PUT 하므로
+  규칙이 없으면 preflight 가 막혀 업로드가 네트워크 오류로 실패한다
+  ("사진 저장소에 연결하지 못했습니다"). 오리진은 서비스 도메인으로 한정한다 —
+  `*` 로 열면 유출된 사전 서명 URL 을 다른 사이트에서 쓸 수 있다.
+  진단은 `curl -X OPTIONS -H 'Origin: <도메인>' -H 'Access-Control-Request-Method: PUT'` 이다.
 - 사전 서명 PUT 에는 `requestChecksumCalculation: 'WHEN_REQUIRED'` 를 준다.
   기본값이면 `x-amz-checksum-crc32` 헤더 때문에 서명 불일치로 거부된다(실제 AWS 에서도).
 - 라벨 사진은 반드시 실제로 업로드된 키를 쓴다(`POST /api/labels/upload`).

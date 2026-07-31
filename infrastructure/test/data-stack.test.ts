@@ -133,6 +133,25 @@ describe('Data Stack Validation', () => {
     }, 3);
   });
 
+  it('미디어 버킷은 서비스 도메인에서의 직접 업로드만 CORS 로 허용한다', () => {
+    const stack = createDataStack();
+    const template = Template.fromStack(stack);
+
+    // 브라우저가 사전 서명 URL 로 직접 PUT 하므로 CORS 가 없으면 업로드가 막힌다.
+    // 오리진을 `*` 로 열면 유출된 사전 서명 URL 을 다른 사이트에서 쓸 수 있다.
+    template.hasResourceProperties('AWS::S3::Bucket', {
+      BucketName: 'waganda-media-dev',
+      CorsConfiguration: {
+        CorsRules: [
+          {
+            AllowedMethods: ['PUT'],
+            AllowedOrigins: ['https://waganda-dev.yanbert.com'],
+          },
+        ],
+      },
+    });
+  });
+
   it('SecureString 시크릿은 CDK 로 만들지 않는다 — 템플릿에 SSM 파라미터가 없어야 한다', () => {
     const stack = createDataStack();
     const template = Template.fromStack(stack);
