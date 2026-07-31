@@ -84,6 +84,15 @@ inclusion: always
   그래서 예외를 반드시 로그로 남겨야 한다. stderr 가 수집되지 않는 경우가 있어
   `console.log`(stdout)을 쓴다. 로그가 없으면 원인 추적이 불가능하다.
 - 헬스체크는 2초 간격이다. `/ping` 에 로그를 남기면 CloudWatch 비용이 계속 발생한다.
+- **Strands SDK 는 스트리밍으로 모델을 호출한다.** IAM 에 `bedrock:InvokeModel` 만 주면
+  `InvokeModelWithResponseStream` 이 없어 모든 모델 호출이 AccessDenied 가 된다.
+  `ConverseStream` 까지 함께 부여한다(웹 Lambda 역할도 같다).
+- **라벨 인식은 AgentCore 가 아니라 `lib/agent/labelDirect.ts` 로 Bedrock 을 직접 호출한다.**
+  에이전트 경로는 프롬프트에 S3 키를 문자열로만 넘겨 모델이 이미지를 볼 수 없어
+  항상 `recognized: false` 였다. 되살리려면 이미지 바이트를 모델 입력에 실어야 한다.
+- **유료 API 호출을 모델 자율 판단(도구)에 맡기지 않는다.** 라벨 에이전트에 `webSearch` 를
+  도구로 줬더니 인식이 실패한 상황에서도 검색을 호출했다. SerpAPI 무료 티어는 월 100회다.
+  검색은 빈 필드가 있을 때만 코드가 한 번 부르도록 통제한다(`lib/agent/labelEnrich.ts`).
 - 원인 분리가 막히면 **같은 이미지를 로컬에서 `docker run` 해 같은 요청을 보낸다.**
   실제로 이 방법으로 `AWS_REGION` 누락을 찾았다(런타임 로그만으로는 보이지 않았다).
 

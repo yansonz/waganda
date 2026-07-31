@@ -117,10 +117,19 @@ export class WagandaPipelineStack extends Stack {
     // Bedrock InvokeModel/Converse 권한
     // 추론 프로파일로만 호출하되, 프로파일이 라우팅하는 파운데이션 모델에도 권한이 필요하다.
     // `global.*` 프로파일은 리전 경계를 넘어 라우팅하므로 모델 ARN 의 리전을 제한하지 않는다.
+    //
+    // **스트리밍 액션을 반드시 포함한다.** Strands SDK 는 기본적으로 스트리밍으로 모델을
+    // 호출하므로(`InvokeModelWithResponseStream`·`ConverseStream`) 비스트리밍 액션만 주면
+    // 라벨 인식·소믈리에 분석이 AccessDenied 로 실패한다(실제로 겪었다).
     agentCoreExecutionRole.addToPrincipalPolicy(
       new iam.PolicyStatement({
         sid: 'BedrockInference',
-        actions: ['bedrock:InvokeModel', 'bedrock:Converse'],
+        actions: [
+          'bedrock:InvokeModel',
+          'bedrock:InvokeModelWithResponseStream',
+          'bedrock:Converse',
+          'bedrock:ConverseStream',
+        ],
         resources: [
           'arn:aws:bedrock:*::foundation-model/*',
           `arn:aws:bedrock:${envConfig.region}:${this.account}:inference-profile/*`,

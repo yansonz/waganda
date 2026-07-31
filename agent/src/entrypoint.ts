@@ -292,6 +292,12 @@ async function handleAnalyzeLabel(
   const repo = new DynamoDbRepository(getDynamoDocClient());
   const trace = startTrace('analyze_label');
   const model = buildModel();
+  /*
+   * ⚠ 이 경로는 실사용되지 않는다. `POST /api/labels/analyze` 는 Bedrock 직접 호출
+   * (`lib/agent/labelDirect.ts`)을 쓴다. 이유와 되살릴 때 고칠 점은 `agents/label.ts`
+   * 주석에 있다 — 요약하면 (1) 아래 프롬프트가 S3 키를 문자열로만 넘겨 모델이 이미지를
+   * 볼 수 없고, (2) webSearch 를 도구로 주면 인식 실패 상황에서도 모델이 검색을 호출한다.
+   */
   // 라벨 보강용 웹 검색 — 키가 없으면 undefined 이고 도구는 빈 결과를 돌려준다
   // (환경변수 SERPAPI_KEY → SSM `/waganda/<env>/search/serpapi-key` 순서로 해석한다)
   const agent = createLabelAgent({

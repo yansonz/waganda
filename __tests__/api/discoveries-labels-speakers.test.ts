@@ -3,12 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { resetDocClient, setDocClient } from '@/lib/db/client';
 import { resetCloudFrontInvalidator, setCloudFrontInvalidator } from '@/lib/cache/invalidate';
-import {
-  resetAgentRuntimeInvoker,
-  setAgentRuntimeInvoker,
-  type AgentRuntimeInvoker,
-} from '@/lib/agent/client';
-import type { AgentInvocationResult } from '@waganda/schemas';
+import { resetAgentRuntimeInvoker, setAgentRuntimeInvoker } from '@/lib/agent/client';
 import { signEditorJWT, COOKIE_NAME } from '@/lib/auth/session';
 
 const cookieStore = new Map<string, { value: string }>();
@@ -153,13 +148,31 @@ describe('POST /api/labels/analyze — 편집자 가드 필수 (모델 호출 �
     expect(invoke).not.toHaveBeenCalled();
   });
 
-  it('에이전트도 폴백도 설정되지 않으면 503 으로 설정 누락을 알린다 (500 아님)', async () => {
+  it('라벨 인식은 이미지를 읽어 Bedrock 을 직접 호출한다 (에이전트 경로는 이미지를 전달하지 못한다)', async () => {
     await withEditorSession();
-    delete process.env.WAGANDA_AGENT_RUNTIME_ARN;
-    delete process.env.WAGANDA_LABEL_FALLBACK;
 
+    /*
+     * AgentCore 의 라벨 에이전트는 프롬프트에 S3 키를 문자열로만 넘겨 모델이 이미지를
+     * 볼 수 없다(항상 `recognized: false`). 그래서 런타임 ARN 이 설정돼 있어도
+     * 라벨 인식은 에이전트를 호출하지 않고 Bedrock 을 직접 부른다.
+     */
+    process.env.WAGANDA_AGENT_RUNTIME_ARN =
+      'arn:aws:bedrock-agentcore:ap-northeast-2:123456789012:runtime/test-abc';
     const invoke = vi.fn();
     setAgentRuntimeInvoker({ invoke });
+
+    // 이미지 조회·모델 호출은 주입으로 대체한다(요금 발생 호출을 테스트에서 하지 않는다).
+    const { setLabelDirectDeps } = await import('@/lib/agent/labelDirect');
+    setLabelDirectDeps({
+      readImage: async () => new Uint8Array([1, 2, 3]),
+      // 모델은 JSON 문자열을 돌려준다(스키마 검증은 labelDirect 가 수행한다).
+      invokeModel: async () =>
+        JSON.stringify({
+          recognized: true,
+          name: { value: 'Château Test', confidence: 'high' },
+          sourceUrls: [],
+        }),
+    });
 
     const { POST } = await import('@/app/api/labels/analyze/route');
     const response = await POST(
@@ -169,37 +182,17 @@ describe('POST /api/labels/analyze — 편집자 가드 필수 (모델 호출 �
       }),
     );
 
-    expect(response.status).toBe(503);
-    const body = (await response.json()) as { error: string; message: string };
-    expect(body.error).toBe('LABEL_AGENT_UNAVAILABLE');
-    expect(body.message).toMatch(/WAGANDA_AGENT_RUNTIME_ARN/);
-    expect(invoke).not.toHaveBeenCalled();
-  });
-
-  it('인증된 요청은 에이전트를 호출하고 라벨 추출 결과를 반환한다', async () => {
-    await withEditorSession();
-    const invoke: AgentRuntimeInvoker['invoke'] = vi.fn(
-      async (): Promise<AgentInvocationResult> => ({
-        ok: true,
-        task: 'analyze_label',
-        completedSteps: [],
-        skippedSteps: [],
-        label: { recognized: true, sourceUrls: [] },
-      }),
-    );
-    setAgentRuntimeInvoker({ invoke });
-
-    const { POST } = await import('@/app/api/labels/analyze/route');
-    const request = makeRequest('https://waganda.test/api/labels/analyze', {
-      method: 'POST',
-      body: { imageKey: 'labels/img1.jpg' },
-    });
-    const response = await POST(request);
-
     expect(response.status).toBe(200);
-    expect(invoke).toHaveBeenCalledOnce();
-    const body = await response.json();
-    expect(body.label.recognized).toBe(true);
+    const body = (await response.json()) as {
+      label?: { name?: { value?: string } };
+      via?: string;
+    };
+    expect(body.via).toBe('bedrock-direct');
+    expect(body.label?.name?.value).toBe('Château Test');
+    // 에이전트 런타임은 호출되지 않아야 한다.
+    expect(invoke).not.toHaveBeenCalled();
+
+    setLabelDirectDeps(undefined);
   });
 });
 

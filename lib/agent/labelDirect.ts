@@ -91,6 +91,19 @@ export interface LabelDirectDeps {
   }) => Promise<string>;
 }
 
+/**
+ * 테스트용 의존성 주입 지점.
+ *
+ * 라우트(`/api/labels/analyze`)가 이 모듈을 직접 부르므로, 인자로만 주입할 수 있으면
+ * 라우트 테스트가 실제 S3·Bedrock 을 때린다. 프로젝트 규약대로 모듈 스코프 setter 를 둔다
+ * (`setDocClient`·`setS3Client` 와 같은 패턴).
+ */
+let injectedDeps: Partial<LabelDirectDeps> | undefined;
+
+export function setLabelDirectDeps(deps: Partial<LabelDirectDeps> | undefined): void {
+  injectedDeps = deps;
+}
+
 function defaultReadImage(): (imageKey: string) => Promise<Uint8Array> {
   return async (imageKey) => {
     assertExternalCallAllowed('S3 라벨 이미지 조회');
@@ -168,8 +181,9 @@ export async function recognizeLabelWithBedrock(
   imageKey: string,
   deps?: Partial<LabelDirectDeps>,
 ): Promise<LabelExtraction> {
-  const readImage = deps?.readImage ?? defaultReadImage();
-  const invokeModel = deps?.invokeModel ?? defaultInvokeModel();
+  // 우선순위: 호출 인자 → 모듈 스코프 주입 → 실제 구현
+  const readImage = deps?.readImage ?? injectedDeps?.readImage ?? defaultReadImage();
+  const invokeModel = deps?.invokeModel ?? injectedDeps?.invokeModel ?? defaultInvokeModel();
 
   const extension = imageKey.split('.').pop()?.toLowerCase() ?? '';
   const format = FORMAT_BY_EXTENSION[extension];

@@ -1,13 +1,10 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { z } from 'zod';
-import { LabelExtraction } from '@waganda/schemas';
 import { withEditorGuard, toErrorResponse } from '@/lib/auth/guard';
 import { toDomainErrorResponse, parseJsonBody } from '@/lib/api/errors';
-import { invokeAgentRuntime } from '@/lib/agent/client';
-import { isDirectLabelFallbackEnabled, recognizeLabelWithBedrock } from '@/lib/agent/labelDirect';
+import { recognizeLabelWithBedrock } from '@/lib/agent/labelDirect';
 import { enrichLabelExtraction } from '@/lib/agent/labelEnrich';
 import { resolveSearchProvider } from '@/lib/search/serpapi';
-import { getRuntimeConfig } from '@/lib/config';
 
 const RequestBody = z.object({
   imageKey: z.string().min(1),
@@ -36,58 +33,42 @@ export const POST = withEditorGuard(async (request: NextRequest) => {
   }
 
   try {
-    const { imageKey, hint } = parsed.data;
-    const config = getRuntimeConfig();
+    const { imageKey } = parsed.data;
 
     /*
-     * 정상 경로는 AgentCore Runtime 의 라벨 에이전트다.
-     * 아직 배포되지 않은 환경(로컬)에서는 `WAGANDA_LABEL_FALLBACK=bedrock` 을 켜
-     * Bedrock 을 직접 호출한다 — 같은 `LabelExtraction` 계약을 지킨다.
+     * 라벨 인식은 **Bedrock 을 직접 호출한다.**
+     *
+     * AgentCore 의 라벨 에이전트는 프롬프트에 S3 키를 문자열로만 넘기고 이미지 자체를
+     * 모델에 전달하지 않는다(`agent/src/entrypoint.ts` 의 analyze_label). 그래서
+     * 모델이 "이미지에 접근할 수 없다"고 답하며 항상 `recognized: false` 가 됐다.
+     * 이미지를 읽어 Converse 이미지 블록으로 넣는 경로는 `lib/agent/labelDirect.ts` 에
+     * 이미 있으므로 그것을 정식 경로로 쓴다.
+     *
+     * 에이전트 경로로 되돌리려면 entrypoint 가 S3 에서 이미지를 읽어 모델 입력에
+     * 이미지 블록으로 실어야 한다. 그 전에는 이 경로가 유일하게 동작한다.
      */
-    if (!config.agentRuntimeArn) {
-      if (!isDirectLabelFallbackEnabled()) {
-        return NextResponse.json(
-          {
-            error: 'LABEL_AGENT_UNAVAILABLE',
-            message:
-              '라벨 인식 서비스가 설정되지 않았습니다. (WAGANDA_AGENT_RUNTIME_ARN 미설정, 로컬에서는 WAGANDA_LABEL_FALLBACK=bedrock 사용)',
-          },
-          { status: 503 },
-        );
-      }
+    // hint 는 현재 직접 경로에서 쓰지 않는다. 모델은 이미지만으로 라벨을 읽는다.
+    const recognized = await recognizeLabelWithBedrock(imageKey);
 
-      const recognized = await recognizeLabelWithBedrock(imageKey);
-
-      /*
-       * 인식된 라벨에 품종·지역·도수가 비어 있으면 보강한다 (R3).
-       * 그 값들이 있어야 취향 분석(R7)·패턴 탐색(R8)의 축으로 쓸 수 있다.
-       * `WAGANDA_LABEL_ENRICH=0` 으로 끌 수 있다(모델 호출을 아끼고 싶을 때).
-       */
-      if (!recognized.recognized || process.env.WAGANDA_LABEL_ENRICH === '0') {
-        return NextResponse.json({ label: recognized, via: 'bedrock-direct' });
-      }
-
-      // 검색 키가 있으면 검색 근거로 채우고, 없으면 모델 지식만으로 채운다
-      // (키는 환경변수 또는 SSM SecureString 에서 해석한다)
-      const enriched = await enrichLabelExtraction(recognized, {
-        search: await resolveSearchProvider(),
-      });
-      return NextResponse.json({
-        label: enriched.extraction,
-        via: 'bedrock-direct',
-        enrichedFields: enriched.filled,
-      });
+    /*
+     * 인식된 라벨에 품종·지역·도수가 비어 있으면 보강한다 (R3).
+     * 그 값들이 있어야 취향 분석(R7)·패턴 탐색(R8)의 축으로 쓸 수 있다.
+     * `WAGANDA_LABEL_ENRICH=0` 으로 끌 수 있다(모델 호출을 아끼고 싶을 때).
+     */
+    if (!recognized.recognized || process.env.WAGANDA_LABEL_ENRICH === '0') {
+      return NextResponse.json({ label: recognized, via: 'bedrock-direct' });
     }
 
-    // 라벨 인식은 특정 시음 세션에 종속되지 않으므로 imageKey 기반 세션 식별자를 쓴다.
-    const result = await invokeAgentRuntime(imageKey, {
-      task: 'analyze_label',
-      imageKey,
-      hint,
+    // 검색 키가 있으면 검색 근거로 채우고, 없으면 모델 지식만으로 채운다
+    // (키는 환경변수 또는 SSM SecureString 에서 해석한다)
+    const enriched = await enrichLabelExtraction(recognized, {
+      search: await resolveSearchProvider(),
     });
-
-    const label = result.label ? LabelExtraction.parse(result.label) : undefined;
-    return NextResponse.json({ label, traceId: result.traceId });
+    return NextResponse.json({
+      label: enriched.extraction,
+      via: 'bedrock-direct',
+      enrichedFields: enriched.filled,
+    });
   } catch (error) {
     const response = toDomainErrorResponse(error) ?? toErrorResponse(error, request);
     if (response) return response;

@@ -239,4 +239,24 @@ describe('Pipeline Stack Validation', () => {
       }),
     });
   });
+  it('AgentCore 실행 역할이 Bedrock 스트리밍 호출을 할 수 있다', () => {
+    const stack = createPipelineStack();
+    const template = Template.fromStack(stack);
+
+    // Strands SDK 는 기본적으로 스트리밍으로 모델을 부른다.
+    // `InvokeModelWithResponseStream` 이 없으면 모든 모델 호출이 AccessDenied 가 된다.
+    template.hasResourceProperties('AWS::IAM::Policy', {
+      PolicyDocument: cdk.assertions.Match.objectLike({
+        Statement: cdk.assertions.Match.arrayWith([
+          cdk.assertions.Match.objectLike({
+            Sid: 'BedrockInference',
+            Action: cdk.assertions.Match.arrayWith([
+              'bedrock:InvokeModelWithResponseStream',
+              'bedrock:ConverseStream',
+            ]),
+          }),
+        ]),
+      }),
+    });
+  });
 });

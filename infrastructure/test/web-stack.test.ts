@@ -161,7 +161,12 @@ describe('WagandaWebStack', () => {
         Statement: Match.arrayWith([
           Match.objectLike({
             Sid: 'BedrockInference',
-            Action: ['bedrock:InvokeModel', 'bedrock:Converse'],
+            // Strands SDK 는 스트리밍으로 모델을 호출한다. 스트리밍 액션이 없으면
+            // 라벨 인식·소믈리에 분석이 AccessDenied 로 실패한다.
+            Action: Match.arrayWith([
+              'bedrock:InvokeModel',
+              'bedrock:InvokeModelWithResponseStream',
+            ]),
           }),
         ]),
       }),

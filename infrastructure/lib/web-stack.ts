@@ -162,7 +162,12 @@ export class WagandaWebStack extends Stack {
     nextjsLambdaRole.addToPrincipalPolicy(
       new iam.PolicyStatement({
         sid: 'BedrockInference',
-        actions: ['bedrock:InvokeModel', 'bedrock:Converse'],
+        actions: [
+          'bedrock:InvokeModel',
+          'bedrock:InvokeModelWithResponseStream',
+          'bedrock:Converse',
+          'bedrock:ConverseStream',
+        ],
         resources: [
           'arn:aws:bedrock:*::foundation-model/*',
           `arn:aws:bedrock:${envConfig.region}:${this.account}:inference-profile/*`,
