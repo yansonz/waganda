@@ -59,7 +59,7 @@ function stubFetch(overrides: Record<string, unknown> = {}) {
 
 /** 파일 입력에 사진을 넣는다 */
 async function attachPhoto(): Promise<void> {
-  const input = screen.getByLabelText('라벨 사진 촬영') as HTMLInputElement;
+  const input = screen.getByLabelText('라벨 사진 올리기') as HTMLInputElement;
   const file = new File(['fake-jpeg'], 'label.jpg', { type: 'image/jpeg' });
   await userEvent.upload(input, file);
 }
@@ -77,7 +77,7 @@ describe('/record — 1단계 라벨 사진', () => {
     const { calls } = stubFetch();
     render(<RecordPage />);
 
-    await waitFor(() => expect(screen.getByLabelText('라벨 사진 촬영')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText('라벨 사진 올리기')).toBeInTheDocument());
     await attachPhoto();
 
     await waitFor(
@@ -94,7 +94,7 @@ describe('/record — 1단계 라벨 사진', () => {
   it('인식 결과로 초안 와인을 만들고 시음을 붙인다', async () => {
     const { calls } = stubFetch();
     render(<RecordPage />);
-    await waitFor(() => expect(screen.getByLabelText('라벨 사진 촬영')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText('라벨 사진 올리기')).toBeInTheDocument());
     await attachPhoto();
 
     await waitFor(() => expect(calls.some((c) => c.url === '/api/tastings')).toBe(true), {
@@ -119,7 +119,7 @@ describe('/record — 1단계 라벨 사진', () => {
   it('인식에 실패하면 사진을 버리지 않고 이름만 입력하도록 전환한다', async () => {
     stubFetch({ '/api/labels/analyze': { label: { recognized: false, sourceUrls: [] } } });
     render(<RecordPage />);
-    await waitFor(() => expect(screen.getByLabelText('라벨 사진 촬영')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText('라벨 사진 올리기')).toBeInTheDocument());
     await attachPhoto();
 
     await waitFor(() => expect(screen.getByLabelText('와인 이름')).toBeInTheDocument(), {
@@ -135,7 +135,7 @@ describe('/record — 1단계 라벨 사진', () => {
       '/api/labels/analyze': { label: { recognized: false, sourceUrls: [] } },
     });
     render(<RecordPage />);
-    await waitFor(() => expect(screen.getByLabelText('라벨 사진 촬영')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText('라벨 사진 올리기')).toBeInTheDocument());
     await attachPhoto();
 
     await waitFor(() => expect(screen.getByLabelText('와인 이름')).toBeInTheDocument(), {
@@ -159,7 +159,7 @@ describe('/record — 1단계 라벨 사진', () => {
       }),
     });
     render(<RecordPage />);
-    await waitFor(() => expect(screen.getByLabelText('라벨 사진 촬영')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText('라벨 사진 올리기')).toBeInTheDocument());
     await attachPhoto();
 
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/서비스에 연결하지 못했습니다/), {
@@ -170,7 +170,7 @@ describe('/record — 1단계 라벨 사진', () => {
   it('사진 없이 이름만 입력해도 기록을 시작할 수 있다', async () => {
     const { calls } = stubFetch();
     render(<RecordPage />);
-    await waitFor(() => expect(screen.getByLabelText('라벨 사진 촬영')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText('라벨 사진 올리기')).toBeInTheDocument());
 
     await userEvent.click(screen.getByRole('button', { name: '사진 없이 이름만 입력' }));
     await userEvent.type(screen.getByLabelText('와인 이름'), '무명 내추럴');
@@ -188,7 +188,7 @@ describe('/record — 1단계 라벨 사진', () => {
       },
     });
     render(<RecordPage />);
-    await waitFor(() => expect(screen.getByLabelText('라벨 사진 촬영')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText('라벨 사진 올리기')).toBeInTheDocument());
     await attachPhoto();
 
     await waitFor(
@@ -205,7 +205,7 @@ describe('/record — 2단계 녹음', () => {
     stubFetch();
     render(<RecordPage />);
 
-    await waitFor(() => expect(screen.getByLabelText('라벨 사진 촬영')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText('라벨 사진 올리기')).toBeInTheDocument());
     expect(screen.getByText('와인을 먼저 확인하면 녹음할 수 있습니다.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /녹음 시작/ })).not.toBeInTheDocument();
   });
@@ -213,7 +213,7 @@ describe('/record — 2단계 녹음', () => {
   it('와인을 확인하면 녹음 컨트롤이 나타난다', async () => {
     stubFetch();
     render(<RecordPage />);
-    await waitFor(() => expect(screen.getByLabelText('라벨 사진 촬영')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText('라벨 사진 올리기')).toBeInTheDocument());
     await attachPhoto();
 
     await waitFor(

@@ -398,70 +398,30 @@ function RecordCapture(): ReactElement {
         {step1.kind === 'idle' && (
           <>
             {/*
-              촬영과 앨범 선택을 **따로** 제공한다.
-              `capture="environment"` 가 붙은 입력은 모바일에서 카메라를 바로 열지만
-              앨범 선택을 막는다. 반대로 속성이 없으면 앨범만 열린다.
-              그래서 두 입력을 나란히 두고 사용자가 고르게 한다
-              (데스크톱에서는 capture 가 무시되어 둘 다 파일 선택으로 동작한다).
-            */}
-            <div className="grid grid-cols-2 gap-3">
-              <label className="flex h-28 cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-gold-500/40 text-center text-cream-200 hover:bg-ink-800">
-                <input
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  className="sr-only"
-                  aria-label="라벨 사진 촬영"
-                  data-testid="label-photo-camera"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) void handlePhoto(file);
-                    // 같은 파일을 다시 고를 수 있도록 값을 비운다.
-                    e.target.value = '';
-                  }}
-                />
-                <svg
-                  aria-hidden="true"
-                  viewBox="0 0 24 24"
-                  className="h-6 w-6 text-gold-200"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                >
-                  <path d="M4 8.5h2.2l1.3-2h9l1.3 2H20a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1Z" />
-                  <circle cx="12" cy="13.5" r="3.2" />
-                </svg>
-                <span className="text-sm">사진 찍기</span>
-              </label>
+              입력은 하나만 둔다.
+              `capture="environment"` 는 **모바일에서만** 구현된 힌트다. 붙이면 카메라가 바로
+              열리는 대신 앨범 선택이 막히고, 데스크톱에서는 무시되어 파일 선택이 열린다.
+              (촬영·선택 버튼을 나눠 봤지만 데스크톱에서 두 버튼이 똑같이 동작해 혼란스러웠다.)
 
-              <label className="flex h-28 cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-gold-500/40 text-center text-cream-200 hover:bg-ink-800">
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="sr-only"
-                  aria-label="라벨 사진 선택"
-                  data-testid="label-photo-library"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) void handlePhoto(file);
-                    e.target.value = '';
-                  }}
-                />
-                <svg
-                  aria-hidden="true"
-                  viewBox="0 0 24 24"
-                  className="h-6 w-6 text-gold-200"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                >
-                  <rect x="3" y="5" width="18" height="14" rx="2" />
-                  <path d="M3 16l4.5-4.5 3.5 3.5 3-3 7 7" />
-                  <circle cx="8.5" cy="9.5" r="1.4" />
-                </svg>
-                <span className="text-sm">사진 선택</span>
-              </label>
-            </div>
+              속성을 떼면 모바일 OS 가 "사진 찍기 / 라이브러리에서 선택" 시트를 띄워 주므로
+              버튼 하나로 두 경로가 모두 열린다. 데스크톱은 파일 선택이다.
+            */}
+            <label className="flex h-28 cursor-pointer items-center justify-center rounded-xl border border-dashed border-gold-500/40 text-center text-cream-200 hover:bg-ink-800">
+              <input
+                type="file"
+                accept="image/*"
+                className="sr-only"
+                aria-label="라벨 사진 올리기"
+                data-testid="label-photo-input"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) void handlePhoto(file);
+                  // 같은 파일을 다시 고를 수 있도록 값을 비운다.
+                  e.target.value = '';
+                }}
+              />
+              <span>라벨 사진 올리기</span>
+            </label>
             <button
               type="button"
               className="text-muted text-xs underline"

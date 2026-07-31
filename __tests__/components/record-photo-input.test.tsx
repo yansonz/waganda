@@ -1,9 +1,11 @@
 /**
- * /record 1단계 — 사진 입력 경로 테스트.
+ * /record 1단계 — 사진 입력 테스트.
  *
- * 촬영과 앨범 선택을 **따로** 제공해야 한다.
- * `capture="environment"` 가 붙은 입력은 모바일에서 카메라를 바로 열지만 앨범 선택을 막고,
- * 속성이 없는 입력은 앨범만 열린다. 하나만 두면 다른 경로가 불가능해진다.
+ * 입력은 **하나**다. `capture` 속성을 붙이지 않는 것이 사양이다.
+ * 붙이면 모바일에서 카메라만 열리고 앨범 선택이 막히며, 데스크톱에서는 무시되어
+ * 파일 선택이 열린다(촬영·선택 버튼을 나눠 봤지만 데스크톱에서 두 버튼이 똑같이
+ * 동작해 혼란스러웠다). 속성이 없으면 모바일 OS 가 "사진 찍기 / 라이브러리에서 선택"
+ * 시트를 띄워 주므로 버튼 하나로 두 경로가 열린다.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
@@ -47,57 +49,30 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('/record — 사진 입력 경로', () => {
-  it('촬영 입력과 선택 입력을 모두 제공한다', async () => {
+describe('/record — 사진 입력', () => {
+  it('이미지만 받는 입력 하나를 제공한다', async () => {
     render(<RecordPage />);
 
-    await waitFor(() => expect(screen.getByTestId('label-photo-camera')).toBeInTheDocument());
-    expect(screen.getByTestId('label-photo-library')).toBeInTheDocument();
+    const input = await waitFor(() => screen.getByTestId('label-photo-input'));
+    expect(input).toHaveAttribute('accept', 'image/*');
+    expect(screen.getByLabelText('라벨 사진 올리기')).toBeInTheDocument();
   });
 
-  it('촬영 입력에만 capture 속성이 붙는다 (선택 입력은 앨범이 열려야 한다)', async () => {
+  it('capture 속성을 붙이지 않는다 (붙이면 앨범 선택이 막힌다)', async () => {
     render(<RecordPage />);
 
-    const camera = await waitFor(() => screen.getByTestId('label-photo-camera'));
-    const library = screen.getByTestId('label-photo-library');
-
-    // 카메라를 바로 여는 것은 이 속성이다.
-    expect(camera).toHaveAttribute('capture', 'environment');
-    // 선택 입력에 capture 가 붙으면 앨범에서 고를 수 없다.
-    expect(library).not.toHaveAttribute('capture');
-
-    // 둘 다 이미지만 받는다.
-    expect(camera).toHaveAttribute('accept', 'image/*');
-    expect(library).toHaveAttribute('accept', 'image/*');
+    const input = await waitFor(() => screen.getByTestId('label-photo-input'));
+    expect(input).not.toHaveAttribute('capture');
   });
 
-  it('두 입력에 각각 접근 가능한 이름이 있다', async () => {
+  it('사진을 넣으면 업로드 단계로 넘어간다', async () => {
     render(<RecordPage />);
 
-    await waitFor(() => expect(screen.getByLabelText('라벨 사진 촬영')).toBeInTheDocument());
-    expect(screen.getByLabelText('라벨 사진 선택')).toBeInTheDocument();
-  });
+    const input = await waitFor(() => screen.getByTestId('label-photo-input'));
+    await userEvent.upload(input, new File(['fake-jpeg'], 'label.jpg', { type: 'image/jpeg' }));
 
-  it('앨범 선택 경로로도 업로드가 시작된다', async () => {
-    render(<RecordPage />);
-
-    const library = await waitFor(() => screen.getByTestId('label-photo-library'));
-    const file = new File(['fake-jpeg'], 'label.jpg', { type: 'image/jpeg' });
-    await userEvent.upload(library, file);
-
-    // 사진을 넣으면 준비·업로드 단계로 전환된다(입력 화면이 사라진다).
     await waitFor(() => {
-      expect(screen.queryByTestId('label-photo-library')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('label-photo-input')).not.toBeInTheDocument();
     });
-  });
-
-  it('아이콘을 글리프가 아니라 인라인 SVG 로 그린다', async () => {
-    const { container } = render(<RecordPage />);
-
-    await waitFor(() => expect(screen.getByTestId('label-photo-camera')).toBeInTheDocument());
-
-    // 글리프는 환경에 따라 두부로 깨진다(평점 별을 숫자로 대체한 것과 같은 이유).
-    expect(container.querySelectorAll('svg').length).toBeGreaterThanOrEqual(2);
-    expect(container.textContent ?? '').not.toMatch(/[▣▤★☆]/);
   });
 });

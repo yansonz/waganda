@@ -20,7 +20,7 @@ test.describe('/record — 비로그인', () => {
 
   test('캡처 컨트롤이 노출되지 않는다', async ({ page }) => {
     await page.goto('/record');
-    await expect(page.getByLabel('라벨 사진 촬영')).toHaveCount(0);
+    await expect(page.getByLabel('라벨 사진 올리기')).toHaveCount(0);
     await expect(page.getByRole('button', { name: /녹음 시작/ })).toHaveCount(0);
   });
 });
@@ -39,7 +39,7 @@ test.describe('/record — 로그인한 편집자', () => {
     await page.goto('/record');
 
     await expect(page.getByText('1 · 무슨 와인이에요?')).toBeVisible();
-    await expect(page.getByLabel('라벨 사진 촬영')).toBeAttached();
+    await expect(page.getByLabel('라벨 사진 올리기')).toBeAttached();
     await expect(page.getByRole('button', { name: '사진 없이 이름만 입력' })).toBeVisible();
 
     // 녹음은 와인 확인 후에만 가능하다
