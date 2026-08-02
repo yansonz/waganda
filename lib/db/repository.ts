@@ -221,6 +221,13 @@ export class DynamoDbRepository implements Repository {
 
     let i = 0;
     for (const [field, value] of Object.entries(updateFields)) {
+      // patch 는 zod optional 필드를 포함한 객체({ field: undefined } 형태)를 그대로
+      // 넘기는 경우가 있다(예: toAnalysisRecord 가 만든 Analysis). undefined 를 그대로
+      // ExpressionAttributeValues 에 넣으면 DynamoDB 가 "attribute value is not defined"
+      // 로 거부한다(재분석 시 실제로 재현됨). 필드를 명시적으로 지우려면 REMOVE 를
+      // 별도로 쓰는 호출부 패턴(patchJob 의 lastError/finishedAt)을 따른다.
+      if (value === undefined) continue;
+
       const nameKey = `#f${i}`;
       const valueKey = `:v${i}`;
       names[nameKey] = field;

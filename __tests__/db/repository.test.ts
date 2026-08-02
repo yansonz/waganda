@@ -114,6 +114,43 @@ describe('DynamoDbRepository', () => {
 
       await expect(repo.patchWine('w1', 0, { name: 'X' })).rejects.toThrow('network error');
     });
+
+    it('patch 필드 값이 undefined 면 SET 표현식·ExpressionAttributeValues 에서 제외한다', async () => {
+      // 회귀 배경: toAnalysisRecord 가 만든 Analysis 는 옵셔널 필드가 없을 때
+      // { speakerContrast: undefined } 형태로 키 자체는 존재한다. 이 값을 그대로
+      // ExpressionAttributeValues 에 넣으면 DynamoDB 가
+      // "An expression attribute value used in expression is not defined" 로 거부한다
+      // (재분석 시 실제 AWS 호출로 재현됨).
+      const updated: Analysis = {
+        type: 'ANALYSIS',
+        tastingId: 't1',
+        summary: '요약',
+        highlights: [],
+        evidence: [{ field: 'summary', basis: '근거', kind: 'quote' }],
+        promptVersion: 'v1',
+        modelId: 'model-1',
+        schemaVersion: 2,
+        createdAt: '2025-01-01T00:00:00Z',
+        updatedAt: '2025-01-01T00:00:00Z',
+        rev: 1,
+      };
+      mockClient.send.mockResolvedValueOnce({ Attributes: updated });
+
+      await repo.patchAnalysis('t1', 0, {
+        summary: '요약',
+        speakerContrast: undefined,
+        comparisonToPast: undefined,
+      });
+
+      const sentCommand = mockClient.send.mock.calls[0][0];
+      const values = sentCommand.input.ExpressionAttributeValues as Record<string, unknown>;
+      const names = sentCommand.input.ExpressionAttributeNames as Record<string, string>;
+
+      expect(Object.values(values)).not.toContain(undefined);
+      expect(Object.values(names)).not.toContain('speakerContrast');
+      expect(Object.values(names)).not.toContain('comparisonToPast');
+      expect(Object.values(names)).toContain('summary');
+    });
   });
 
   describe('queryTastingBundle', () => {
