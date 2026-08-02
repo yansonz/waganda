@@ -8,6 +8,7 @@
  */
 import type { Repository } from '@app/db/repository';
 import type { SommelierOutput } from '@waganda/schemas';
+import { sanitizeAnalysisText } from '@waganda/schemas';
 import type { CloudFrontClient } from '@aws-sdk/client-cloudfront';
 import { CreateInvalidationCommand } from '@aws-sdk/client-cloudfront';
 import { toAnalysisRecord } from './sommelierAnalysis.js';
@@ -29,12 +30,10 @@ export function makePersistAndPublishNode(deps: PersistAndPublishDeps) {
     }
 
     const promptVersion = (ctx.data['sommelierPromptVersion'] as string | undefined) ?? 'unknown';
-    const analysis = toAnalysisRecord(
-      ctx.tastingId,
-      sommelierOutput,
-      promptVersion,
-      deps.modelId,
-      deps.traceId,
+    // 모델이 JSON 문자열 값 안에 리터럴 이스케이프(\")를 그대로 생성하는 결함을
+    // 저장 시점에 정리한다 — 화면뿐 아니라 DB 원본도 오염되지 않게 한다.
+    const analysis = sanitizeAnalysisText(
+      toAnalysisRecord(ctx.tastingId, sommelierOutput, promptVersion, deps.modelId, deps.traceId),
     );
 
     const existingAnalysis = await deps.repo.getAnalysis(ctx.tastingId);

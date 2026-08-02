@@ -1,16 +1,6 @@
 import { z } from 'zod';
 import { EntityId, NoteAxisValue, Persona, Rating, entityMetaShape } from './common';
 
-/**
- * 모델이 JSON 문자열 값 안에 리터럴 이스케이프(`\"`, `\\`)를 그대로 생성하는 결함을
- * 방어적으로 정리한다. Bedrock/Claude 가 인용부호를 강조하려다 이스케이프 문자
- * 자체를 텍스트 콘텐츠로 남기는 사례가 실측됐다(예: `\"19 Crimes\"` 가 화면에 그대로 노출).
- * 정상적인 한국어 문장에는 백슬래시가 나타나지 않으므로 무조건 제거해도 안전하다.
- */
-function sanitizeModelText(value: string): string {
-  return value.replace(/\\(["\\])/g, '$1');
-}
-
 /** 5축 시음 노트 */
 export const TastingNotes = z.object({
   acidity: NoteAxisValue,
@@ -40,8 +30,8 @@ export type TastingNotesAverage = z.infer<typeof TastingNotesAverage>;
 
 /** 하이라이트 — 실제 발화 인용과 해석 */
 export const Highlight = z.object({
-  quote: z.string().min(1).max(1000).transform(sanitizeModelText),
-  note: z.string().min(1).max(1000).transform(sanitizeModelText),
+  quote: z.string().min(1).max(1000),
+  note: z.string().min(1).max(1000),
   atSec: z.number().min(0).optional(),
   speaker: z.union([Persona, z.enum(['speaker_1', 'speaker_2'])]).optional(),
 });
@@ -71,7 +61,7 @@ export type SpeakerReaction = z.infer<typeof SpeakerReaction>;
  * 저장 레코드가 아니라 모델 출력 계약이다.
  */
 export const SommelierOutput = z.object({
-  summary: z.string().min(1).max(4000).transform(sanitizeModelText),
+  summary: z.string().min(1).max(4000),
   /**
    * 인용할 발화가 없으면(무음 녹음) 빈 배열이 될 수 있다.
    * R5: 무음은 실패가 아니라 해석 입력이다 — 없는 인용을 만들게 하지 않는다.
@@ -83,9 +73,9 @@ export const SommelierOutput = z.object({
   notes: TastingNotes.partial().optional(),
   evidence: z.array(Evidence).min(1).max(30),
   /** 화자 매핑 신뢰도가 none 이면 생략 (R5) */
-  speakerContrast: z.string().max(2000).transform(sanitizeModelText).optional(),
+  speakerContrast: z.string().max(2000).optional(),
   /** 같은 와인·유사 와인 과거 기록 대비 변화 */
-  comparisonToPast: z.string().max(2000).transform(sanitizeModelText).optional(),
+  comparisonToPast: z.string().max(2000).optional(),
   /** 화자별 반응 — 두 화자가 구분된 경우에만 */
   reactions: z.object({ speaker_1: SpeakerReaction, speaker_2: SpeakerReaction }).optional(),
   /** 감정 타임라인 (UI 차트용) */
@@ -100,14 +90,14 @@ export type SommelierOutput = z.infer<typeof SommelierOutput>;
 export const Analysis = z.object({
   type: z.literal('ANALYSIS'),
   tastingId: EntityId,
-  summary: z.string().transform(sanitizeModelText),
+  summary: z.string(),
   highlights: z.array(Highlight),
   /** 발화가 없어 평점을 낼 수 없었던 기록은 비어 있을 수 있다 */
   aiRating: Rating.optional(),
   notes: TastingNotes.partial().optional(),
   evidence: z.array(Evidence),
-  speakerContrast: z.string().transform(sanitizeModelText).optional(),
-  comparisonToPast: z.string().transform(sanitizeModelText).optional(),
+  speakerContrast: z.string().optional(),
+  comparisonToPast: z.string().optional(),
   reactions: z.object({ speaker_1: SpeakerReaction, speaker_2: SpeakerReaction }).optional(),
   emotionTimeline: z
     .array(z.object({ atSec: z.number().min(0), intensity: z.number().min(0).max(1) }))
@@ -115,7 +105,7 @@ export const Analysis = z.object({
   /** 0~100 반응 일치도 — 두 화자 구분 시에만 */
   agreementScore: z.number().min(0).max(100).optional(),
   /** 사용자 수정본 — 원본(summary/highlights)은 보존한다 */
-  editedSummary: z.string().transform(sanitizeModelText).optional(),
+  editedSummary: z.string().optional(),
   editedHighlights: z.array(Highlight).optional(),
   promptVersion: z.string().min(1),
   modelId: z.string().min(1),

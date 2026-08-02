@@ -19,6 +19,7 @@ import {
   Wine,
   Winery,
   CURRENT_SCHEMA_VERSION,
+  sanitizeAnalysisText,
 } from '@waganda/schemas';
 import { getDocClient } from '@/lib/db/client';
 import { getRuntimeConfig } from '@/lib/config';
@@ -373,7 +374,9 @@ export class DynamoDbRepository implements Repository {
 
   async getAnalysis(tastingId: string): Promise<Analysis | undefined> {
     const item = await this.getItem(tastingPk(tastingId), ANALYSIS_SK);
-    return item ? Analysis.parse(item) : undefined;
+    // 모델이 생성한 리터럴 이스케이프(\") 잔여물을 읽기 시점에 정리한다 — 스키마
+    // transform 으로 하면 Strands SDK 의 JSON Schema 변환이 깨진다(analysis.ts 참고).
+    return item ? sanitizeAnalysisText(Analysis.parse(item)) : undefined;
   }
 
   async putAnalysis(analysis: Analysis): Promise<void> {
@@ -508,7 +511,7 @@ export class DynamoDbRepository implements Repository {
         }
         case 'ANALYSIS': {
           const result = Analysis.safeParse(item);
-          if (result.success) bundle.analysis = result.data;
+          if (result.success) bundle.analysis = sanitizeAnalysisText(result.data);
           else this.warnAndQuarantine(item, result.error, bundle.quarantined);
           break;
         }

@@ -9,6 +9,7 @@ export * from './wine';
 export * from './tasting';
 export * from './recording';
 export * from './analysis';
+export * from './sanitize';
 export * from './job';
 export * from './profile';
 export * from './discovery';

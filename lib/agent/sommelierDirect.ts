@@ -1,5 +1,5 @@
 import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-runtime';
-import { SommelierOutput, type Acoustic, type SpeakerMapping, type Transcript } from '@waganda/schemas';
+import { SommelierOutput, sanitizeAnalysisText, type Acoustic, type SpeakerMapping, type Transcript } from '@waganda/schemas';
 import { getRuntimeConfig } from '@/lib/config';
 import { assertExternalCallAllowed } from '@/lib/aws/testGuard';
 
@@ -272,7 +272,9 @@ export async function analyzeWithBedrock(
           continue;
         }
 
-        return { ok: true, output, attempts: attempt };
+        // 모델이 JSON 문자열 값 안에 리터럴 이스케이프(\")를 그대로 생성하는 결함을
+        // 여기서 정리한다(스키마 transform 은 Strands SDK 의 JSON Schema 변환을 깨뜨린다).
+        return { ok: true, output: sanitizeAnalysisText(output), attempts: attempt };
       }
       lastError = parsed.error.issues
         .slice(0, 3)
