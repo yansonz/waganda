@@ -20,9 +20,9 @@ import { assertExternalCallAllowed } from '@/lib/aws/testGuard';
 const DEFAULT_MODEL_ID = 'global.anthropic.claude-haiku-4-5-20251001-v1:0';
 const MAX_ATTEMPTS = 3;
 
-export const SOMMELIER_PROMPT_VERSION = 'sommelier-direct-v2';
+export const SOMMELIER_PROMPT_VERSION = 'sommelier-direct-v3';
 
-const SYSTEM_PROMPT = `당신은 부부의 와인 시음 대화를 읽고 시음 노트를 만드는 소믈리에입니다.
+export const SYSTEM_PROMPT = `당신은 부부의 와인 시음 대화를 읽고 시음 노트를 만드는 소믈리에입니다.
 
 ## 문체 (중요)
 
@@ -56,6 +56,21 @@ const SYSTEM_PROMPT = `당신은 부부의 와인 시음 대화를 읽고 시음
 - **발화가 없거나 트랜스크립트가 비어 있으면**: highlights 는 빈 배열로 두고, aiRating 과 notes 는
   **키 자체를 넣지 마세요**(null 금지). summary 에는 침묵·음향 신호만으로 관찰한 내용을 적습니다.
   근거(evidence)는 kind: "acoustic" 으로 채웁니다.
+
+## emotionTimeline (필수)
+
+emotionTimeline 은 화면의 감정 강도 차트에 쓰입니다. **선택 항목이 아니라 매번 산출합니다.**
+발화·음향 신호(웃음 후보, 침묵, 감탄사)가 있는 시점을 기준으로 atSec(초)·intensity(0~1) 쌍을
+시간 순으로 3~15개 만드세요. 대화가 짧거나 무음이어도 침묵 구간은 낮은 intensity, 웃음 후보나
+감탄사 지점은 높은 intensity 로 반영해 최소 2개 이상 넣습니다 — 완전한 무음이 아니라면
+빈 배열로 두지 마세요.
+
+## 문자열 값 작성 규칙 (중요)
+
+summary·highlights·comparisonToPast·speakerContrast 등 모든 문자열 필드 안에서 강조나 인용을
+표시할 때 **큰따옴표를 쓰지 마세요.** "19 Crimes" 처럼 고유명사를 강조하고 싶으면 따옴표 없이
+그대로 쓰거나 앞뒤에 공백만 둡니다. JSON 문자열 내부에 이스케이프 문자(백슬래시와 인용부호를
+붙여 쓰는 표기)를 직접 생성하지 마세요 — 이스케이프가 그대로 화면에 노출되는 결함으로 이어집니다.
 
 출력은 아래 형태의 JSON 하나만 반환하세요. 설명·코드펜스 금지.
 

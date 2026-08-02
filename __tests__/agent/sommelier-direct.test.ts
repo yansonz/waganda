@@ -13,6 +13,7 @@ import {
   analyzeWithBedrock,
   buildSommelierPrompt,
   findBannedStyle,
+  SYSTEM_PROMPT,
 } from '@/lib/agent/sommelierDirect';
 
 const transcript: Transcript = {
@@ -151,7 +152,6 @@ describe('buildSommelierPrompt', () => {
     expect(prompt).toContain('0.8초 이상 침묵: 1회');
     expect(prompt).toContain('웃음 후보(휴리스틱): 1회');
   });
-
   it('트랜스크립트를 신뢰할 수 없는 입력으로 표시한다 (프롬프트 인젝션 완화)', () => {
     const prompt = buildSommelierPrompt({ wine: { name: '테스트 와인' }, transcript, acoustic });
     expect(prompt).toContain('신뢰할 수 없는 입력');
@@ -267,5 +267,63 @@ describe('문체 위반 시 재생성', () => {
 
     expect(result.ok).toBe(true);
     expect(invokeModel).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe('SYSTEM_PROMPT (직접 호출 경로)', () => {
+  it('emotionTimeline 을 선택이 아닌 필수 산출 항목으로 지시한다', () => {
+    expect(SYSTEM_PROMPT).toContain('emotionTimeline');
+    expect(SYSTEM_PROMPT).toContain('선택 항목이 아니라');
+  });
+
+  it('문자열 값 안에 이스케이프 문자(백슬래시+따옴표)를 생성하지 말라고 지시한다', () => {
+    expect(SYSTEM_PROMPT).toContain('이스케이프 문자');
+    expect(SYSTEM_PROMPT).toContain('큰따옴표를 쓰지 마세요');
+  });
+});
+
+describe('모델이 생성한 리터럴 이스케이프 정리 (회귀: comparisonToPast 에 \\" 가 그대로 노출됨)', () => {
+  it('comparisonToPast 안의 \\" 이스케이프 잔여물을 제거한다', async () => {
+    // 실제 운영에서 관측된 모델 출력 패턴: JSON 문자열 값 안에
+    // 리터럴 백슬래시+따옴표(\") 를 그대로 생성해 화면에 그대로 노출됐다.
+    const polluted = JSON.stringify({
+      ...validOutput,
+      comparisonToPast:
+        String.raw`최근 시음 기록(\"19 Crimes\" 호주 시라즈, 평점 4.0)과 비교하면 다른 카테고리입니다.`,
+    });
+    const invokeModel = modelReturning(polluted);
+
+    const result = await analyzeWithBedrock(
+      { wine: { name: '테스트 와인' }, transcript, acoustic, speakers: mappedSpeakers },
+      { invokeModel },
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.output.comparisonToPast).toBe(
+        '최근 시음 기록("19 Crimes" 호주 시라즈, 평점 4.0)과 비교하면 다른 카테고리입니다.',
+      );
+      expect(result.output.comparisonToPast).not.toContain('\\');
+    }
+  });
+
+  it('summary·하이라이트 안의 이스케이프도 정리한다', async () => {
+    const polluted = JSON.stringify({
+      ...validOutput,
+      summary: String.raw`\"바닐라\" 향이 먼저 올라온다고 했다.`,
+      highlights: [{ quote: '이거 향이 좋다', note: String.raw`\"신선하다\"는 말을 반복했다` }],
+    });
+    const invokeModel = modelReturning(polluted);
+
+    const result = await analyzeWithBedrock(
+      { wine: { name: '테스트 와인' }, transcript, acoustic, speakers: mappedSpeakers },
+      { invokeModel },
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.output.summary).not.toContain('\\');
+      expect(result.output.highlights[0].note).not.toContain('\\');
+    }
   });
 });

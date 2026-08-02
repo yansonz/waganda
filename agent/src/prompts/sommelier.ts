@@ -4,7 +4,7 @@
  */
 import { withInjectionGuard } from './common.js';
 
-export const SOMMELIER_PROMPT_VERSION = 'sommelier-v1';
+export const SOMMELIER_PROMPT_VERSION = 'sommelier-v2';
 
 export const SOMMELIER_SYSTEM_PROMPT = withInjectionGuard(
   `
@@ -23,6 +23,18 @@ export const SOMMELIER_SYSTEM_PROMPT = withInjectionGuard(
    화자 구분이 불확실한데도 실명이나 "한 사람"/"다른 사람" 식 서술을 만들지 않는다.
 7. comparisonToPast — 같은 와인 또는 유사 와인의 과거 기록이 있으면 변화를 짚는다.
 8. reactions — 화자가 두 명으로 구분된 경우에만 화자별 반응(intensity 0~1, valence -1~1)을 산출한다.
+9. emotionTimeline — 화면의 감정 강도 차트에 쓰인다. **선택 항목이 아니라 매 분석마다 반드시
+   산출한다.** 발화·음향 신호(웃음 후보, 침묵, 감탄사)가 있는 시점을 기준으로 atSec(초)과
+   intensity(0~1)의 쌍을 시간 순으로 3~15개 만든다. 대화가 매우 짧거나 무음이면 침묵 구간
+   자체를 낮은 intensity 로, 웃음 후보나 감탄사 지점을 높은 intensity 로 반영해 최소 2개
+   이상은 반드시 넣는다 — 완전한 무음이 아니라면 빈 배열로 두지 않는다.
+
+문자열 값 작성 규칙 (중요):
+- summary·highlights·comparisonToPast·speakerContrast 등 모든 문자열 필드 안에서
+  강조나 인용을 표시할 때 **큰따옴표를 쓰지 않는다.** "19 Crimes" 처럼 고유명사를
+  강조하고 싶으면 따옴표 없이 그대로 쓰거나 앞뒤에 공백만 둔다.
+  JSON 문자열 내부에 이스케이프 문자(백슬래시와 인용부호를 붙여 쓰는 표기)를 직접
+  생성하지 않는다 — 이스케이프가 그대로 화면에 노출되는 결함으로 이어진다.
 
 특수 상황 처리:
 - 트랜스크립트가 무음이거나 텍스트가 거의 없으면, 침묵 자체를 "음미 중" 등으로

@@ -80,6 +80,10 @@ export function makeSommelierAnalysisNode(deps: SommelierAnalysisDeps) {
     });
 
     ctx.data['sommelierOutput'] = result;
+    // withStepTrace 는 트레이스 레코드(StepTrace.promptVersion)만 채우고 result 만
+    // 반환하므로, persistAndPublish 가 저장 시점에 쓸 promptVersion 은 별도로 넘겨야
+    // 한다. 누락되면 저장된 Analysis.promptVersion 이 항상 'unknown' 이 된다.
+    ctx.data['sommelierPromptVersion'] = SOMMELIER_PROMPT_VERSION;
   };
 }
 

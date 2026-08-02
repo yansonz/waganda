@@ -167,6 +167,9 @@ describe('세션 B — Transcribe 완료 후 파이프라인', () => {
 
     const analysisAfterFirst = await repo.getAnalysis('tasting-b1');
     expect(analysisAfterFirst).toBeDefined();
+    // persistAndPublish 가 promptVersion 을 'unknown' 으로 폴백하던 결함의 회귀 테스트.
+    // sommelierAnalysis 노드가 ctx.data['sommelierPromptVersion'] 을 세팅해야 통과한다.
+    expect(analysisAfterFirst?.promptVersion).not.toBe('unknown');
 
     // Job 이 completed 상태이므로, entrypoint 수준에서는 재실행을 막지만
     // 그래프 자체를 completedSteps 전체로 다시 호출해도 재작성 없이 스킵된다.
