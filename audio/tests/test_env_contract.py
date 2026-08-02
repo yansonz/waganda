@@ -9,9 +9,17 @@ Acoustic 스키마로 파싱하려다 실패한다 — 실제로 `MEDIA_BUCKET` 
 from __future__ import annotations
 
 import re
+import sys
 from pathlib import Path
 
-import handler
+# test_handler.py / test_features.py 와 동일한 방어 코드.
+# pytest 의 수집 순서(알파벳순: test_env_contract.py 가 가장 먼저)에서는 다른 테스트
+# 파일이 sys.path 에 audio/ 를 추가하기 전에 이 파일이 import 되므로, 각자 독립적으로
+# 경로를 추가해야 한다. 누락되면 `ModuleNotFoundError: No module named 'handler'` 로
+# 컬렉션 자체가 실패해 37개 테스트 전체가 실행되지 않는다(CI 재현됨).
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+import handler  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PIPELINE_STACK = REPO_ROOT / "infrastructure" / "lib" / "pipeline-stack.ts"
