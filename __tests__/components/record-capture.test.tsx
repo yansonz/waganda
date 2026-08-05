@@ -47,6 +47,7 @@ function stubFetch(overrides: Record<string, unknown> = {}) {
     '/api/tastings/tasting-1/wine': { tasting: { id: 'tasting-1', wineId: 'wine-1' } },
     '/api/tastings/tasting-1/recordings': { uploadUrl: 'https://s3.test/audio-put' },
     '/api/tastings/tasting-1/analyze': { jobStatus: 'queued' },
+    '/api/tastings/incomplete': { captures: [] },
     '/api/tastings': { tastingId: 'tasting-1' },
     ...overrides,
   };
@@ -235,6 +236,36 @@ describe('/record — 2단계 녹음', () => {
     const captureCall = calls.find((call) => call.url === '/api/tastings');
     expect(captureCall?.body).toEqual(expect.objectContaining({ tastedAt: expect.any(String) }));
     expect(captureCall?.body).not.toHaveProperty('wineId');
+  });
+
+  it('미완성 녹음 캡처를 이어서 사진을 연결하고 분석을 예약한다', async () => {
+    const { calls } = stubFetch({
+      '/api/tastings/incomplete': {
+        captures: [
+          {
+            tastingId: 'tasting-1',
+            tastedAt: '2025-01-01T00:00:00Z',
+            recordingCount: 1,
+            kind: 'needs_wine',
+          },
+        ],
+      },
+    });
+    render(<RecordPage />);
+
+    await userEvent.click(await screen.findByRole('button', { name: '라벨 사진 연결하기' }));
+    await expect(screen.getByRole('status')).toHaveTextContent(/기존 녹음 1개/);
+    await attachPhoto();
+
+    await waitFor(() =>
+      expect(calls.find((call) => call.url === '/api/tastings/tasting-1/wine')?.body).toEqual({
+        wineId: 'wine-1',
+        labelImageKey: 'labels/abc.jpg',
+      }),
+    );
+    await waitFor(() =>
+      expect(calls.find((call) => call.url === '/api/tastings/tasting-1/analyze')?.body).toEqual({}),
+    );
   });
 
   it('녹음 뒤 사진을 붙이면 기존 캡처에 와인을 연결한다', async () => {

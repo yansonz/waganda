@@ -177,6 +177,62 @@ async function loadAllTastingSummaries(repo: Repository): Promise<{
   return { summaries, tastings: publishedTastings, wineById };
 }
 
+/** 편집자가 나중에 입력을 보완할 수 있는, 아직 한 종류의 입력이 비어 있는 캡처. */
+export interface IncompleteTastingCaptureView {
+  tastingId: string;
+  tastedAt: string;
+  recordingCount: number;
+  kind: 'needs_wine' | 'needs_audio';
+  wine?: { wineId: string; name: string; vintage?: number };
+}
+
+/**
+ * 편집자 작업함용 미완성 캡처 조회.
+ *
+ * 공개 목록에는 최종 분석까지 끝난 기록만 남기되, 라벨 또는 녹음 중 하나가 없는 캡처는
+ * 편집자가 `/record`에서 이어 쓸 수 있도록 별도로 제공한다. 두 입력이 이미 있는
+ * 폴리싱·분석 대기 기록은 자동 파이프라인의 책임이므로 여기에는 넣지 않는다.
+ */
+export async function getIncompleteTastingCaptureView(
+  repo: Repository,
+): Promise<IncompleteTastingCaptureView[]> {
+  const { items: tastings } = await repo.listByType<Tasting>('TASTING', 'desc');
+  const captures = await Promise.all(
+    tastings.map(async (tasting): Promise<IncompleteTastingCaptureView | undefined> => {
+      const bundle = await repo.queryTastingBundle(tasting.id);
+      const recordingCount = bundle.recordings.length;
+
+      if (!tasting.wineId && recordingCount > 0) {
+        return {
+          tastingId: tasting.id,
+          tastedAt: tasting.tastedAt,
+          recordingCount,
+          kind: 'needs_wine',
+        };
+      }
+
+      if (tasting.wineId && recordingCount === 0) {
+        const wine = await repo.getWine(tasting.wineId);
+        return {
+          tastingId: tasting.id,
+          tastedAt: tasting.tastedAt,
+          recordingCount,
+          kind: 'needs_audio',
+          wine: {
+            wineId: tasting.wineId,
+            name: wine?.name ?? '연결된 와인',
+            vintage: wine?.vintage,
+          },
+        };
+      }
+
+      return undefined;
+    }),
+  );
+
+  return captures.filter((capture): capture is IncompleteTastingCaptureView => capture !== undefined);
+}
+
 /* ── 14.1 대시보드 ────────────────────────────────────────────── */
 
 export interface DashboardView {

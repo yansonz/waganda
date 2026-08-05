@@ -9,6 +9,7 @@ import {
   getDashboardView,
   getDiscoveriesView,
   getExploreView,
+  getIncompleteTastingCaptureView,
   getRankingsView,
   getTasteProfileView,
   getTastingDetailView,
@@ -73,6 +74,73 @@ describe('lib/views/read — 데이터 없는 상태', () => {
     const repo = new InMemoryRepository();
     expect(await getWineDetailView(repo, 'nope')).toBeUndefined();
     expect(await getWineryDetailView(repo, 'nope')).toBeUndefined();
+  });
+});
+
+describe('lib/views/read — getIncompleteTastingCaptureView', () => {
+  it('음성만 있거나 와인만 있는 캡처만 이어쓰기 대상으로 반환한다', async () => {
+    const repo = new InMemoryRepository();
+    await repo.putWine(makeWine({ id: 'wine-1', name: '바롤로', vintage: 2018 }));
+    const audioFirstSource = makeTasting({
+      id: 'audio-first',
+      wineId: 'placeholder-wine',
+      tastedAt: '2025-01-01T00:00:00Z',
+      lifecycle: 'collecting',
+    });
+    const { wineId: _unusedWineId, ...audioFirst } = audioFirstSource;
+    await repo.putTasting(audioFirst);
+    await repo.putRecording({
+      id: 'recording-1',
+      type: 'RECORDING',
+      tastingId: 'audio-first',
+      audioKey: 'recordings/audio-first/recording-1.webm',
+      format: 'webm',
+      durationSec: 20,
+      schemaVersion: 2,
+      createdAt: '2025-01-01T00:00:00Z',
+      updatedAt: '2025-01-01T00:00:00Z',
+      rev: 0,
+    });
+    await repo.putTasting(
+      makeTasting({
+        id: 'photo-first',
+        wineId: 'wine-1',
+        tastedAt: '2025-01-02T00:00:00Z',
+        lifecycle: 'awaiting_audio',
+      }),
+    );
+    await repo.putTasting(
+      makeTasting({
+        id: 'complete',
+        wineId: 'wine-1',
+        tastedAt: '2025-01-03T00:00:00Z',
+        lifecycle: 'ready',
+      }),
+    );
+    await repo.putRecording({
+      id: 'recording-2',
+      type: 'RECORDING',
+      tastingId: 'complete',
+      audioKey: 'recordings/complete/recording-2.webm',
+      format: 'webm',
+      durationSec: 20,
+      schemaVersion: 2,
+      createdAt: '2025-01-01T00:00:00Z',
+      updatedAt: '2025-01-01T00:00:00Z',
+      rev: 0,
+    });
+
+    await expect(getIncompleteTastingCaptureView(repo)).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ tastingId: 'audio-first', kind: 'needs_wine', recordingCount: 1 }),
+        expect.objectContaining({
+          tastingId: 'photo-first',
+          kind: 'needs_audio',
+          wine: expect.objectContaining({ wineId: 'wine-1', name: '바롤로' }),
+        }),
+      ]),
+    );
+    await expect(getIncompleteTastingCaptureView(repo)).resolves.toHaveLength(2);
   });
 });
 
