@@ -162,3 +162,32 @@ export async function presignLabelImageUpload(input: {
 
   return { imageKey, uploadUrl, expiresInSec: PRESIGN_EXPIRES_IN_SEC };
 }
+
+/* ── 음식 사진 ─────────────────────────────────────────────────── */
+
+/** 음식 사진 업로드용 S3 키 (media 버킷의 `food/` 프리픽스) */
+export function buildFoodImageKey(imageId: string, extension: string): string {
+  return `${MEDIA_KEY_PREFIX.food}${imageId}.${extension}`;
+}
+
+/** 음식 사진 업로드용 사전 서명 URL을 발급한다. */
+export async function presignFoodImageUpload(input: {
+  contentType: string;
+}): Promise<{ imageKey: string; uploadUrl: string; expiresInSec: number }> {
+  const config = getRuntimeConfig();
+  const extension = LABEL_IMAGE_TYPES[input.contentType];
+  if (!extension) {
+    throw new Error(
+      `지원하지 않는 이미지 형식입니다: ${input.contentType} (지원: ${Object.keys(LABEL_IMAGE_TYPES).join(', ')})`,
+    );
+  }
+
+  const imageKey = buildFoodImageKey(randomUUID(), extension);
+  const uploadUrl = await getPresigner(config.region).presignPut({
+    bucket: config.mediaBucket,
+    key: imageKey,
+    contentType: input.contentType,
+  });
+
+  return { imageKey, uploadUrl, expiresInSec: PRESIGN_EXPIRES_IN_SEC };
+}

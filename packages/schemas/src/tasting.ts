@@ -30,6 +30,8 @@ export const Tasting = z.object({
   /** 편집자가 직접 넣은 평점 (AI 평점과 별도 보관) */
   manualRating: Rating.optional(),
   memo: z.string().max(2000).optional(),
+  /** 곁들인 음식 사진 S3 키 목록 */
+  foodImageKeys: z.array(z.string().min(1).max(512)).max(8).optional(),
   ...entityMetaShape,
 });
 export type Tasting = z.infer<typeof Tasting>;
@@ -41,6 +43,8 @@ export const TastingInput = z.object({
   priceKrw: z.number().int().min(0).max(100_000_000).optional(),
   manualRating: Rating.optional(),
   memo: z.string().max(2000).optional(),
+  /** 곁들인 음식 사진 S3 키 목록 */
+  foodImageKeys: z.array(z.string().min(1).max(512)).max(8).optional(),
 });
 export type TastingInput = z.infer<typeof TastingInput>;
 
