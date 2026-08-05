@@ -82,6 +82,19 @@ function RecordCapture(): ReactElement {
     setStep1({ kind: 'idle' });
   }, []);
 
+  const deleteIncompleteCapture = useCallback(
+    async (capture: IncompleteCapture) => {
+      if (!window.confirm('이 미완성 기록을 삭제하시겠습니까? 저장된 녹음도 함께 삭제됩니다.')) return;
+      const response = await runWriteAction(`/api/tastings/${capture.tastingId}`, {
+        method: 'DELETE',
+      });
+      if (response.ok) {
+        setIncompleteCaptures((prev) => prev.filter((item) => item.tastingId !== capture.tastingId));
+      }
+    },
+    [runWriteAction],
+  );
+
   useEffect(() => {
     let cancelled = false;
 
@@ -500,7 +513,11 @@ function RecordCapture(): ReactElement {
       <h1 className="font-display text-2xl text-cream-100">시음 기록</h1>
 
       {!captureTastingId && (
-        <IncompleteCaptureList captures={incompleteCaptures} onResume={resumeCapture} />
+        <IncompleteCaptureList
+          captures={incompleteCaptures}
+          onResume={resumeCapture}
+          onDelete={deleteIncompleteCapture}
+        />
       )}
 
       {resumedCapture && (

@@ -14,6 +14,7 @@ export interface IncompleteCapture {
 interface IncompleteCaptureListProps {
   captures: IncompleteCapture[];
   onResume: (capture: IncompleteCapture) => void;
+  onDelete?: (capture: IncompleteCapture) => void;
 }
 
 function formatTastedAt(tastedAt: string): string {
@@ -27,7 +28,7 @@ function formatTastedAt(tastedAt: string): string {
 }
 
 /** 라벨 또는 녹음이 하나 부족한 시음 캡처를 편집자가 이어 쓰는 카드 목록. */
-export function IncompleteCaptureList({ captures, onResume }: IncompleteCaptureListProps): ReactElement | null {
+export function IncompleteCaptureList({ captures, onResume, onDelete }: IncompleteCaptureListProps): ReactElement | null {
   if (captures.length === 0) return null;
 
   return (
@@ -66,6 +67,16 @@ export function IncompleteCaptureList({ captures, onResume }: IncompleteCaptureL
                 >
                   {action}
                 </button>
+                {onDelete && (
+                  <button
+                    type="button"
+                    onClick={() => onDelete(capture)}
+                    aria-label={`${wineName ?? '미완성 기록'} 삭제`}
+                    className="rounded border border-burgundy-500/40 px-3 py-2 text-sm text-burgundy-300 hover:bg-burgundy-500/10"
+                  >
+                    삭제
+                  </button>
+                )}
               </div>
             </li>
           );
