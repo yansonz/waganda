@@ -267,8 +267,9 @@ describe('/record — 2단계 녹음', () => {
     await waitFor(() => expect(calls.some((call) => call.url.endsWith('/recordings'))).toBe(true));
 
     await attachPhoto();
-    await waitFor(() => expect(calls.some((call) => call.url.endsWith('/analyze'))).toBe(true));
-    expect(calls.find((call) => call.url === '/api/tastings/tasting-1/analyze')?.body).toEqual({});
+    await waitFor(() =>
+      expect(calls.find((call) => call.url === '/api/tastings/tasting-1/analyze')?.body).toEqual({}),
+    );
   });
 
   it('와인을 확인하면 녹음 컨트롤이 나타난다', async () => {
