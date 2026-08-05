@@ -12,6 +12,7 @@ import { EmotionTimeline } from '@/components/tasting/EmotionTimeline';
 import { HighlightList } from '@/components/tasting/HighlightList';
 import { TastingCard } from '@/components/tasting/TastingCard';
 import { TastingEditControls } from '@/components/tasting/TastingEditControls';
+import { ResumeTastingCapture } from '@/components/tasting/ResumeTastingCapture';
 import { FitBadge } from '@/components/wine/FitBadge';
 import { WineInfoCard } from '@/components/wine/WineInfoCard';
 import { EmptyState } from '@/components/common/EmptyState';
@@ -133,6 +134,12 @@ export default async function TastingDetailPage({ params }: PageProps): Promise<
           />
         </div>
       </header>
+
+      <ResumeTastingCapture
+        tastingId={tasting.id}
+        hasWine={wine !== undefined}
+        recordingCount={recordings.length}
+      />
 
       {tasting.labelImageKey && (
         <Image

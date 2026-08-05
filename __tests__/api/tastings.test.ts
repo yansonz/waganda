@@ -178,6 +178,19 @@ describe('POST /api/tastings', () => {
   });
 });
 
+describe('GET /api/tastings/incomplete', () => {
+  beforeEach(() => {
+    cookieStore.clear();
+  });
+
+  it('미인증 요청은 401 을 반환한다', async () => {
+    const { GET } = await import('@/app/api/tastings/incomplete/route');
+    const response = await GET(makeRequest('https://waganda.test/api/tastings/incomplete'));
+
+    expect(response.status).toBe(401);
+  });
+});
+
 describe('POST /api/tastings/[id]/wine', () => {
   let mockClient: ReturnType<typeof createMockDocClient>;
 

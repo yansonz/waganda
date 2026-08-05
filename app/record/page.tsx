@@ -1,11 +1,15 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useState, type ReactElement } from 'react';
 import { MAX_RECORDINGS_PER_TASTING, type LabelExtraction } from '@waganda/schemas';
 import { EditorOnly, EditorSessionProvider } from '@/components/auth/EditorSession';
 import { WriteActionGuard, useWriteAction } from '@/components/auth/WriteActionGuard';
 import { AudioRecorder } from '@/components/record/AudioRecorder';
+import {
+  IncompleteCaptureList,
+  type IncompleteCapture,
+} from '@/components/record/IncompleteCaptureList';
 import { validateAudioUpload } from '@/lib/upload/validate';
 import { prepareLabelImage } from '@/lib/upload/image';
 
@@ -54,6 +58,55 @@ function RecordCapture(): ReactElement {
   const [creatingCapture, setCreatingCapture] = useState(false);
   const [manualName, setManualName] = useState('');
   const [recordingCount, setRecordingCount] = useState(0);
+  const [incompleteCaptures, setIncompleteCaptures] = useState<IncompleteCapture[]>([]);
+  const [resumedCapture, setResumedCapture] = useState<IncompleteCapture | null>(null);
+
+  const resumeCapture = useCallback((capture: IncompleteCapture) => {
+    setCaptureTastingId(capture.tastingId);
+    setRecordingCount(capture.recordingCount);
+    setStep2({ kind: 'idle' });
+    setResumedCapture(capture);
+
+    if (capture.kind === 'needs_audio' && capture.wine) {
+      const summary = `${capture.wine.name}${capture.wine.vintage ? ` ${capture.wine.vintage}` : ''}`;
+      setStep1({
+        kind: 'ready',
+        wineId: capture.wine.wineId,
+        tastingId: capture.tastingId,
+        summary,
+        attachedToExisting: false,
+      });
+      return;
+    }
+
+    setStep1({ kind: 'idle' });
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void fetch('/api/tastings/incomplete', { cache: 'no-store' })
+      .then(async (response) => {
+        if (!response.ok) return [];
+        const body = (await response.json()) as { captures?: IncompleteCapture[] };
+        return body.captures ?? [];
+      })
+      .then((captures) => {
+        if (!cancelled) setIncompleteCaptures(captures);
+      })
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (captureTastingId || incompleteCaptures.length === 0) return;
+    const tastingId = new URLSearchParams(window.location.search).get('resume');
+    const capture = incompleteCaptures.find((item) => item.tastingId === tastingId);
+    if (capture) resumeCapture(capture);
+  }, [captureTastingId, incompleteCaptures, resumeCapture]);
 
   /** 초안 와인 + 시음 세션을 만든다 (사진 인식 결과 또는 직접 입력한 이름 기반) */
   const createDraftAndTasting = useCallback(
@@ -445,6 +498,18 @@ function RecordCapture(): ReactElement {
   return (
     <main className="mx-auto max-w-md space-y-8 p-4">
       <h1 className="font-display text-2xl text-cream-100">시음 기록</h1>
+
+      {!captureTastingId && (
+        <IncompleteCaptureList captures={incompleteCaptures} onResume={resumeCapture} />
+      )}
+
+      {resumedCapture && (
+        <p role="status" className="rounded-lg border border-gold-500/25 bg-ink-900/60 p-3 text-sm text-cream-200">
+          {resumedCapture.kind === 'needs_wine'
+            ? `기존 녹음 ${resumedCapture.recordingCount}개에 라벨 사진이나 와인 이름을 연결합니다.`
+            : '기존 와인 정보에 반응 녹음을 이어서 남깁니다.'}
+        </p>
+      )}
 
       {/* ── 1단계: 라벨 사진 ─────────────────────────────── */}
       <section aria-labelledby="step-wine" className="space-y-3">
