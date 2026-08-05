@@ -13,6 +13,7 @@ import { HighlightList } from '@/components/tasting/HighlightList';
 import { TastingCard } from '@/components/tasting/TastingCard';
 import { TastingEditControls } from '@/components/tasting/TastingEditControls';
 import { ResumeTastingCapture } from '@/components/tasting/ResumeTastingCapture';
+import { FoodPhotos } from '@/components/tasting/FoodPhotos';
 import { FitBadge } from '@/components/wine/FitBadge';
 import { WineInfoCard } from '@/components/wine/WineInfoCard';
 import { EmptyState } from '@/components/common/EmptyState';
@@ -250,6 +251,12 @@ export default async function TastingDetailPage({ params }: PageProps): Promise<
 
       {/* 라벨·웹 검색으로 모은 와인 정보 — 과거 기록 바로 위에 둔다 */}
       {wine && <WineInfoCard wine={wine} winery={winery} regionPath={regionPath} />}
+
+      <FoodPhotos
+        tastingId={tasting.id}
+        foodImageKeys={tasting.foodImageKeys ?? []}
+        rev={tasting.rev}
+      />
 
       <section aria-labelledby="past-tastings-heading">
         <h2 id="past-tastings-heading" className="font-display mb-2 text-lg text-cream-100">

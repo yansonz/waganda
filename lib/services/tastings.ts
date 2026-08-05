@@ -239,3 +239,65 @@ export async function overrideSpeakerMapping(
     },
   });
 }
+
+/** 시음당 음식 사진 최대 수 */
+export const MAX_FOOD_PHOTOS_PER_TASTING = 8;
+
+/** 음식 사진 장수 초과 에러 */
+export class FoodPhotoLimitExceededError extends Error {
+  readonly code = 'FOOD_PHOTO_LIMIT_EXCEEDED';
+  readonly status = 400;
+
+  constructor(
+    message = `음식 사진은 최대 ${MAX_FOOD_PHOTOS_PER_TASTING}장까지 추가할 수 있습니다.`,
+  ) {
+    super(message);
+    this.name = 'FoodPhotoLimitExceededError';
+  }
+}
+
+/** 시음 세션에 음식 사진 키를 추가한다 */
+export async function addFoodPhoto(
+  repo: Repository,
+  tastingId: string,
+  expectedRev: number,
+  imageKey: string,
+): Promise<Tasting> {
+  const tasting = requireFound(
+    await repo.getTasting(tastingId),
+    '음식 사진을 추가할 시음 세션을 찾을 수 없습니다.',
+  );
+
+  const existing = tasting.foodImageKeys ?? [];
+  if (existing.length >= MAX_FOOD_PHOTOS_PER_TASTING) {
+    throw new FoodPhotoLimitExceededError();
+  }
+  if (existing.includes(imageKey)) {
+    // 중복 추가는 무시하고 현재 상태 반환 (멱등)
+    return tasting;
+  }
+
+  return repo.patchTasting(tastingId, expectedRev, {
+    foodImageKeys: [...existing, imageKey],
+  });
+}
+
+/** 시음 세션에서 음식 사진 키를 제거한다 */
+export async function removeFoodPhoto(
+  repo: Repository,
+  tastingId: string,
+  expectedRev: number,
+  imageKey: string,
+): Promise<Tasting> {
+  const tasting = requireFound(
+    await repo.getTasting(tastingId),
+    '음식 사진을 제거할 시음 세션을 찾을 수 없습니다.',
+  );
+
+  const existing = tasting.foodImageKeys ?? [];
+  const updated = existing.filter((k) => k !== imageKey);
+
+  return repo.patchTasting(tastingId, expectedRev, {
+    foodImageKeys: updated.length > 0 ? updated : undefined,
+  });
+}

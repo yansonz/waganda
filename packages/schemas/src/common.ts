@@ -117,4 +117,6 @@ export const MEDIA_KEY_PREFIX = {
   labels: 'labels/',
   /** 녹음 — 업로드 이벤트가 분석 파이프라인을 시작한다 */
   recordings: 'recordings/',
+  /** 곁들인 음식 사진 — 라벨과 동일하게 이벤트 알림 대상이 아니다 */
+  food: 'food/',
 } as const;
