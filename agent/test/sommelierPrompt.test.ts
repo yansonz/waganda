@@ -10,6 +10,8 @@
  *   문자로 직접 생성했기 때문이다. 프롬프트로 이를 명시적으로 금지한다.
  */
 import { describe, expect, it } from 'vitest';
+import type { Recording } from '@waganda/schemas';
+import { buildSommelierUserPrompt } from '../src/graph/nodes/sommelierAnalysis.js';
 import { SOMMELIER_SYSTEM_PROMPT } from '../src/prompts/sommelier.js';
 
 describe('소믈리에 시스템 프롬프트', () => {
@@ -21,5 +23,31 @@ describe('소믈리에 시스템 프롬프트', () => {
   it('문자열 값 안에 이스케이프 문자(백슬래시+따옴표)를 생성하지 말라고 지시한다', () => {
     expect(SOMMELIER_SYSTEM_PROMPT).toContain('이스케이프 문자');
     expect(SOMMELIER_SYSTEM_PROMPT).toContain('큰따옴표를 쓰지 않는다');
+  });
+
+  it('와인 스냅샷은 넣되 발화·음향 원자료를 대체하지 말라고 지시한다', () => {
+    const recording: Recording = {
+      id: 'recording-1',
+      type: 'RECORDING',
+      tastingId: 'tasting-1',
+      audioKey: 'recordings/tasting-1/recording-1.webm',
+      durationSec: 12,
+      format: 'webm',
+      schemaVersion: 2,
+      createdAt: '2026-08-05T00:00:00Z',
+      updatedAt: '2026-08-05T00:00:00Z',
+      rev: 0,
+    };
+
+    const prompt = buildSommelierUserPrompt(recording, 'tasting-1', {
+      name: 'Château Margaux',
+      grapes: ['Cabernet Sauvignon'],
+      country: 'France',
+    });
+
+    expect(prompt).toContain('<wine_context>');
+    expect(prompt).toContain('이름=Château Margaux');
+    expect(prompt).toContain('품종=Cabernet Sauvignon');
+    expect(prompt).toContain('없는 감상을 사실처럼 만들지 마라');
   });
 });

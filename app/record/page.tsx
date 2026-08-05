@@ -10,16 +10,11 @@ import { validateAudioUpload } from '@/lib/upload/validate';
 import { prepareLabelImage } from '@/lib/upload/image';
 
 /**
- * app/record/page.tsx — 시음 기록 캡처 (2단계).
+ * app/record/page.tsx — 순서 독립 시음 기록 캡처.
  *
- * 설계 의도: 와인을 마시는 중에는 폼을 채울 수 없다.
- * 그래서 입력을 **사진 한 번 + 녹음 한 번**으로 줄이고, 나머지는 AI 와 사후 편집에 맡긴다.
- *
- *   1단계 — 라벨 사진: 촬영 → 인식 → 결과를 한 줄로 확인 (초안 와인 즉시 생성)
- *   2단계 — 녹음: 버튼 하나로 시작/종료. 종료하면 **자동 저장**되고 분석이 시작된다.
- *
- * 저장 버튼과 상세 와인 폼은 이 화면에 두지 않는다.
- * 저신뢰 필드는 시음 상세 화면에서 확인·수정한다.
+ * 사진과 녹음 중 어느 쪽을 먼저 시작해도 같은 캡처(tastingId)에 합류한다.
+ * 사진이 먼저면 와인을 연결한 뒤 녹음하고, 녹음이 먼저면 반응을 저장한 뒤
+ * 라벨 사진을 붙여 분석에 필요한 맥락을 완성한다. 저장 버튼은 두지 않는다.
  */
 const FORM_ID = 'record-capture';
 
@@ -55,6 +50,8 @@ function RecordCapture(): ReactElement {
 
   const [step1, setStep1] = useState<Step1State>({ kind: 'idle' });
   const [step2, setStep2] = useState<Step2State>({ kind: 'idle' });
+  const [captureTastingId, setCaptureTastingId] = useState<string | null>(null);
+  const [creatingCapture, setCreatingCapture] = useState(false);
   const [manualName, setManualName] = useState('');
   const [recordingCount, setRecordingCount] = useState(0);
 
@@ -137,6 +134,19 @@ function RecordCapture(): ReactElement {
         }).catch(() => undefined);
       }
 
+      if (captureTastingId) {
+        const attachResponse = await runWriteAction(`/api/tastings/${captureTastingId}/wine`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ wineId, labelImageKey }),
+        });
+        if (!attachResponse.ok) {
+          if (attachResponse.status === 401) return { error: '' };
+          return { error: '현재 기록에 와인 정보를 연결하지 못했습니다.' };
+        }
+        return { wineId, tastingId: captureTastingId, attachedToExisting };
+      }
+
       const tastingResponse = await runWriteAction('/api/tastings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -160,8 +170,50 @@ function RecordCapture(): ReactElement {
 
       return { wineId, tastingId, attachedToExisting };
     },
+    [captureTastingId, runWriteAction],
+  );
+
+  /** 와인 정보가 갖춰진 캡처의 최종 분석을 백그라운드에서 예약한다. */
+  const triggerAnalysis = useCallback(
+    async (tastingId: string): Promise<boolean> => {
+      const response = await runWriteAction(`/api/tastings/${tastingId}/analyze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      }).catch(() => undefined);
+      return response?.ok === true;
+    },
     [runWriteAction],
   );
+
+  /** 녹음 우선 흐름에서 사용할 빈 캡처를 만든다. */
+  const startRecordingCapture = useCallback(async () => {
+    if (captureTastingId || creatingCapture) return;
+    setCreatingCapture(true);
+    try {
+      const response = await runWriteAction('/api/tastings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tastedAt: new Date().toISOString() }),
+      });
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({}))) as { message?: string };
+        setStep2({ kind: 'error', message: body.message ?? '녹음을 준비하지 못했습니다.' });
+        return;
+      }
+      const body = (await response.json()) as { tastingId?: string; id?: string };
+      const tastingId = body.tastingId ?? body.id;
+      if (!tastingId) {
+        setStep2({ kind: 'error', message: '녹음을 준비하지 못했습니다.' });
+        return;
+      }
+      setCaptureTastingId(tastingId);
+    } catch {
+      setStep2({ kind: 'error', message: '네트워크 오류로 녹음을 준비하지 못했습니다.' });
+    } finally {
+      setCreatingCapture(false);
+    }
+  }, [captureTastingId, creatingCapture, runWriteAction]);
 
   /** 1단계 — 사진 선택 시: 업로드 → 인식 → 초안 와인·시음 생성 */
   const handlePhoto = useCallback(
@@ -257,6 +309,12 @@ function RecordCapture(): ReactElement {
           return;
         }
 
+        const analysisStarted =
+          recordingCount > 0 ? await triggerAnalysis(created.tastingId) : false;
+        if (recordingCount > 0) {
+          setStep2({ kind: 'done', tastingId: created.tastingId, analysisStarted });
+        }
+        setCaptureTastingId(created.tastingId);
         setStep1({
           kind: 'ready',
           wineId: created.wineId,
@@ -271,7 +329,7 @@ function RecordCapture(): ReactElement {
         });
       }
     },
-    [runWriteAction, createDraftAndTasting],
+    [runWriteAction, createDraftAndTasting, recordingCount, triggerAnalysis],
   );
 
   /** 1단계 폴백 — 이름만 입력해 초안 와인·시음 생성 */
@@ -292,6 +350,11 @@ function RecordCapture(): ReactElement {
       });
       return;
     }
+    const analysisStarted = recordingCount > 0 ? await triggerAnalysis(created.tastingId) : false;
+    if (recordingCount > 0) {
+      setStep2({ kind: 'done', tastingId: created.tastingId, analysisStarted });
+    }
+    setCaptureTastingId(created.tastingId);
     setStep1({
       kind: 'ready',
       wineId: created.wineId,
@@ -299,13 +362,13 @@ function RecordCapture(): ReactElement {
       summary: name,
       attachedToExisting: created.attachedToExisting,
     });
-  }, [manualName, createDraftAndTasting, step1]);
+  }, [manualName, createDraftAndTasting, recordingCount, step1, triggerAnalysis]);
 
   /** 2단계 — 녹음 종료 시: 사전 서명 URL 발급 → 업로드 → 분석 시작 (자동 저장) */
   const handleRecordingComplete = useCallback(
     async (blob: Blob, meta: { durationSec: number; mimeType: string }) => {
-      if (step1.kind !== 'ready') return;
-      const { tastingId } = step1;
+      if (!captureTastingId) return;
+      const tastingId = captureTastingId;
 
       if (recordingCount >= MAX_RECORDINGS_PER_TASTING) {
         setStep2({
@@ -365,25 +428,19 @@ function RecordCapture(): ReactElement {
          * 배포 환경에서는 AgentCore 파이프라인이, 로컬에서는 로컬 파이프라인이 돈다.
          * 실패해도 녹음은 저장돼 있으므로 화면을 막지 않는다(상세에서 재분석 가능).
          */
-        const analyzeResponse = await runWriteAction(`/api/tastings/${tastingId}/analyze`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({}),
-        }).catch(() => undefined);
+        const analysisStarted =
+          step1.kind === 'ready' ? await triggerAnalysis(tastingId) : false;
 
-        setStep2({
-          kind: 'done',
-          tastingId,
-          analysisStarted: analyzeResponse?.ok === true,
-        });
+        setStep2({ kind: 'done', tastingId, analysisStarted });
       } catch {
         setStep2({ kind: 'error', message: '네트워크 오류로 녹음을 저장하지 못했습니다.' });
       }
     },
-    [step1, recordingCount, runWriteAction],
+    [captureTastingId, recordingCount, runWriteAction, step1, triggerAnalysis],
   );
 
   const wineReady = step1.kind === 'ready';
+  const recordingReady = captureTastingId !== null;
 
   return (
     <main className="mx-auto max-w-md space-y-8 p-4">
@@ -392,7 +449,7 @@ function RecordCapture(): ReactElement {
       {/* ── 1단계: 라벨 사진 ─────────────────────────────── */}
       <section aria-labelledby="step-wine" className="space-y-3">
         <h2 id="step-wine" className="text-muted text-sm">
-          1 · 무슨 와인이에요?
+와인 라벨 · 나중에 붙여도 됩니다
         </h2>
 
         {step1.kind === 'idle' && (
@@ -494,13 +551,23 @@ function RecordCapture(): ReactElement {
       {/* ── 2단계: 녹음 ──────────────────────────────────── */}
       <section aria-labelledby="step-record" className="space-y-3">
         <h2 id="step-record" className="text-muted text-sm">
-          2 · 마시면서 이야기하세요
+반응 녹음
         </h2>
 
-        {!wineReady ? (
-          <p className="text-muted text-sm">와인을 먼저 확인하면 녹음할 수 있습니다.</p>
+        {!recordingReady ? (
+          <button
+            type="button"
+            onClick={() => void startRecordingCapture()}
+            disabled={creatingCapture}
+            className="w-full rounded-xl border border-gold-500/40 px-4 py-3 text-sm text-gold-300 hover:bg-gold-500/10 disabled:opacity-40"
+          >
+            {creatingCapture ? '녹음 준비 중…' : '지금 반응 녹음하기'}
+          </button>
         ) : (
           <>
+            {!wineReady && (
+              <p className="text-muted text-sm">와인 사진은 녹음을 마친 뒤에 붙여도 됩니다.</p>
+            )}
             <AudioRecorder onRecordingComplete={handleRecordingComplete} />
             {recordingCount > 0 && (
               <p className="text-muted text-xs">
@@ -525,7 +592,9 @@ function RecordCapture(): ReactElement {
             <p role="status" className="text-cream-200 text-sm">
               {step2.analysisStarted
                 ? '저장했습니다. 분석이 끝나면 기록에 반영됩니다.'
-                : '저장했습니다. 분석은 기록 화면에서 다시 시작할 수 있습니다.'}
+                : wineReady
+                  ? '저장했습니다. 분석은 기록 화면에서 다시 시작할 수 있습니다.'
+                  : '저장했습니다. 와인 사진을 연결하면 반응을 분석합니다.'}
             </p>
             <Link
               href={`/tastings/${step2.tastingId}`}

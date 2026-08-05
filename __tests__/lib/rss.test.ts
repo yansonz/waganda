@@ -4,7 +4,7 @@
  * XML 이스케이핑, guid, pubDate, 링크 패턴이 스펙대로 나오는지 검증한다.
  */
 import { describe, expect, it } from 'vitest';
-import { buildRssFeed, escapeXml } from '@/lib/rss';
+import { buildRssFeed, escapeXml, isRssEligibleTasting } from '@/lib/rss';
 import type { TastingSummaryView } from '@/lib/views/read';
 
 function makeTastingSummary(
@@ -31,6 +31,26 @@ describe('escapeXml', () => {
 });
 
 describe('buildRssFeed', () => {
+  it('라벨 사진과 최종 분석 요약이 모두 있을 때만 RSS 항목 자격을 준다', () => {
+    expect(
+      isRssEligibleTasting(
+        makeTastingSummary({
+          tastingId: 'complete',
+          labelImageKey: 'labels/complete.jpg',
+          summary: '반응 분석이 완료되었습니다.',
+        }),
+      ),
+    ).toBe(true);
+    expect(isRssEligibleTasting(makeTastingSummary({ tastingId: 'no-photo', summary: '분석 완료' }))).toBe(
+      false,
+    );
+    expect(
+      isRssEligibleTasting(
+        makeTastingSummary({ tastingId: 'no-analysis', labelImageKey: 'labels/no-analysis.jpg' }),
+      ),
+    ).toBe(false);
+  });
+
   it('채널 메타데이터(title·link·description)를 이스케이프해 포함한다', () => {
     const xml = buildRssFeed({
       title: '와간다 & 타임라인',

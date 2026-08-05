@@ -149,6 +149,18 @@ function buildGraphWithDeps(
 describe('세션 B — Transcribe 완료 후 파이프라인', () => {
   it('세션 B를 중복 호출해도 분석 결과가 중복 생성되지 않는다', async () => {
     const repo = new InMemoryRepository();
+    const now = new Date().toISOString();
+    await repo.putTasting({
+      id: 'tasting-b1',
+      type: 'TASTING',
+      wineId: 'wine-b1',
+      lifecycle: 'polishing',
+      tastedAt: now,
+      schemaVersion: 2,
+      createdAt: now,
+      updatedAt: now,
+      rev: 0,
+    });
     await seedJobAndRecording(repo, 'tasting-b1', 'rec-b1');
     const agent = createFakeAgent([VALID_SOMMELIER_OUTPUT]);
     const graph = buildGraphWithDeps(repo, 'rec-b1', 'tasting-b1', agent);
@@ -167,6 +179,7 @@ describe('세션 B — Transcribe 완료 후 파이프라인', () => {
 
     const analysisAfterFirst = await repo.getAnalysis('tasting-b1');
     expect(analysisAfterFirst).toBeDefined();
+    expect((await repo.getTasting('tasting-b1'))?.lifecycle).toBe('ready');
     // persistAndPublish 가 promptVersion 을 'unknown' 으로 폴백하던 결함의 회귀 테스트.
     // sommelierAnalysis 노드가 ctx.data['sommelierPromptVersion'] 을 세팅해야 통과한다.
     expect(analysisAfterFirst?.promptVersion).not.toBe('unknown');

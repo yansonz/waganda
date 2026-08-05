@@ -158,6 +158,102 @@ describe('POST /api/tastings', () => {
     const body = await response.json();
     expect(body.tastingId).toBeDefined();
   });
+
+  it('wineId 없이 녹음 우선 캡처를 생성한다', async () => {
+    await withEditorSession();
+    mockClient.send.mockResolvedValueOnce({}); // putTasting
+
+    const { POST } = await import('@/app/api/tastings/route');
+    const request = makeRequest('https://waganda.test/api/tastings', {
+      method: 'POST',
+      body: { tastedAt: '2025-01-01T00:00:00Z' },
+    });
+    const response = await POST(request);
+
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as { tasting: Record<string, unknown> };
+    expect(body.tasting).toMatchObject({ lifecycle: 'collecting' });
+    expect(body.tasting).not.toHaveProperty('wineId');
+    expect(mockClient.send).toHaveBeenCalledOnce();
+  });
+});
+
+describe('POST /api/tastings/[id]/wine', () => {
+  let mockClient: ReturnType<typeof createMockDocClient>;
+
+  beforeEach(() => {
+    cookieStore.clear();
+    mockClient = createMockDocClient();
+    setDocClient(mockClient as never);
+  });
+
+  afterEach(() => {
+    resetDocClient();
+    vi.clearAllMocks();
+  });
+
+  it('미인증 요청은 401 을 반환한다', async () => {
+    const { POST } = await import('@/app/api/tastings/[id]/wine/route');
+    const request = makeRequest('https://waganda.test/api/tastings/t1/wine', {
+      method: 'POST',
+      body: { wineId: 'wine-1' },
+    });
+
+    expect((await POST(request)).status).toBe(401);
+  });
+
+  it('녹음이 있는 캡처에 와인을 연결하고 폴리싱 대기 상태로 전이한다', async () => {
+    await withEditorSession();
+    const wineItem = {
+      id: 'wine-1',
+      type: 'WINE',
+      name: 'Barolo 2018',
+      nameNormalized: 'barolo 2018',
+      grapes: [],
+      labelTags: [],
+      sourceUrls: [],
+      schemaVersion: 2,
+      createdAt: '2025-01-01T00:00:00Z',
+      updatedAt: '2025-01-01T00:00:00Z',
+      rev: 0,
+      pk: 'WINE#wine-1',
+      sk: 'META',
+    };
+    const capture = {
+      ...baseTasting,
+      wineId: undefined,
+      lifecycle: 'collecting',
+      pk: 'TASTING#t1',
+      sk: 'META',
+    };
+    mockClient.send.mockResolvedValueOnce({ Item: capture }); // getTasting
+    mockClient.send.mockResolvedValueOnce({ Item: wineItem }); // getWine
+    mockClient.send.mockResolvedValueOnce({ Items: [recordingItem('r1')] }); // queryTastingBundle
+    mockClient.send.mockResolvedValueOnce({
+      Attributes: {
+        ...baseTasting,
+        wineId: 'wine-1',
+        labelImageKey: 'labels/first.jpg',
+        lifecycle: 'polishing',
+        pk: 'TASTING#t1',
+        sk: 'META',
+      },
+    }); // patchTasting
+
+    const { POST } = await import('@/app/api/tastings/[id]/wine/route');
+    const request = makeRequest('https://waganda.test/api/tastings/t1/wine', {
+      method: 'POST',
+      body: { wineId: 'wine-1', labelImageKey: 'labels/first.jpg' },
+    });
+    const response = await POST(request);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual(
+      expect.objectContaining({
+        tasting: expect.objectContaining({ wineId: 'wine-1', lifecycle: 'polishing' }),
+      }),
+    );
+  });
 });
 
 describe('PATCH /api/tastings/[id] — 원본 AI 생성물 보존', () => {

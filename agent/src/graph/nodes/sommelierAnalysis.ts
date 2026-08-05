@@ -8,7 +8,7 @@
  * (design.md '출력 스키마 검증').
  */
 import type { Agent } from '@strands-agents/sdk';
-import { SommelierOutput, type Analysis, type Recording } from '@waganda/schemas';
+import { SommelierOutput, type Analysis, type Recording, type Wine } from '@waganda/schemas';
 import type { Repository } from '@app/db/repository';
 import { validateWithRetry } from '../../lib/validate.js';
 import { SOMMELIER_PROMPT_VERSION } from '../../prompts/sommelier.js';
@@ -24,15 +24,35 @@ export interface SommelierAnalysisDeps {
   recordingId: string;
 }
 
-/** 소믈리에 에이전트를 호출할 입력 프롬프트를 구성한다. 사용자 데이터는 구분된 블록으로 전달한다 */
-function buildUserPrompt(recording: Recording, tastingId: string): string {
+/**
+ * 소믈리에 에이전트를 호출할 입력 프롬프트를 구성한다.
+ * 와인 정보는 애매한 표현을 보강하는 컨텍스트일 뿐, 발화·음향 원자료를 대체하지 않는다.
+ */
+export function buildSommelierUserPrompt(
+  recording: Recording,
+  tastingId: string,
+  wine?: Pick<Wine, 'name' | 'vintage' | 'grapes' | 'country' | 'regionName' | 'alcoholPercent'>,
+): string {
   const transcriptText = recording.transcript?.fullText ?? '(무음 또는 트랜스크립트 없음)';
   const speakerInfo = recording.speakers
     ? `화자 매핑 신뢰도: ${recording.speakers.mappingConfidence}`
     : '화자분리 정보 없음';
+  const wineContext = wine
+    ? [
+        `이름=${wine.name}`,
+        wine.vintage ? `빈티지=${wine.vintage}` : undefined,
+        wine.grapes.length > 0 ? `품종=${wine.grapes.join(', ')}` : undefined,
+        wine.country ? `국가=${wine.country}` : undefined,
+        wine.regionName ? `산지=${wine.regionName}` : undefined,
+        wine.alcoholPercent ? `도수=${wine.alcoholPercent}` : undefined,
+      ]
+        .filter(Boolean)
+        .join(', ')
+    : '확정 와인 정보 없음';
 
   return [
     `<tasting_id>${tastingId}</tasting_id>`,
+    `<wine_context>${wineContext}</wine_context>`,
     '<transcript_untrusted_user_data>',
     transcriptText,
     '</transcript_untrusted_user_data>',
@@ -40,6 +60,7 @@ function buildUserPrompt(recording: Recording, tastingId: string): string {
     recording.acoustic
       ? `<acoustic_summary>발화속도=${recording.acoustic.speechRate}, 침묵구간수=${recording.acoustic.silences.length}, 웃음후보=${recording.acoustic.laughterCandidates.length}</acoustic_summary>`
       : '<acoustic_summary>음향 특징 없음</acoustic_summary>',
+    '와인 정보는 애매한 표현의 맥락 보강에만 사용하고, 발화·음향에 없는 감상을 사실처럼 만들지 마라.',
     '위 데이터를 근거로 시음 분석 결과를 요청된 JSON 스키마로 생성하라.',
   ].join('\n');
 }
@@ -53,11 +74,14 @@ export function makeSommelierAnalysisNode(deps: SommelierAnalysisDeps) {
       throw new Error('sommelierAnalysis 노드 진입 전에 loadState 가 실행되어야 합니다.');
     }
 
+    const tasting = await deps.repo.getTasting(ctx.tastingId);
+    const wine = tasting?.wineId ? await deps.repo.getWine(tasting.wineId) : undefined;
+
     const result = await withStepTrace(deps.trace, 'sommelier_analysis', async () => {
       const validation = await validateWithRetry({
         schema: SommelierOutput,
         generate: async (attempt, lastError) => {
-          const prompt = buildUserPrompt(recording, ctx.tastingId);
+          const prompt = buildSommelierUserPrompt(recording, ctx.tastingId, wine);
           const withRetryNote =
             attempt === 0
               ? prompt

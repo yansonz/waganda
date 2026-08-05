@@ -30,17 +30,23 @@ function newId(): string {
   return randomUUID();
 }
 
-/** 시음 세션 생성 — wineId 참조 무결성을 검증한다. 시음자 정보는 받지 않는다 (R2) */
+/**
+ * 시음 세션 생성 — 와인 정보가 아직 없어도 캡처를 먼저 시작할 수 있다.
+ * wineId 가 들어온 경우에만 참조 무결성을 검증한다. 시음자 정보는 받지 않는다 (R2).
+ */
 export async function createTasting(repo: Repository, input: TastingInput): Promise<Tasting> {
-  await assertRefsExist([
-    refCheck('wineId', input.wineId, async () => (await repo.getWine(input.wineId)) !== undefined),
-  ]);
+  if (input.wineId) {
+    await assertRefsExist([
+      refCheck('wineId', input.wineId, async () => (await repo.getWine(input.wineId!)) !== undefined),
+    ]);
+  }
 
   const now = nowIso();
   const tasting: Tasting = {
     id: newId(),
     type: 'TASTING',
     wineId: input.wineId,
+    lifecycle: input.wineId ? 'awaiting_audio' : 'collecting',
     tastedAt: input.tastedAt,
     labelImageKey: input.labelImageKey,
     priceKrw: input.priceKrw,
@@ -55,6 +61,28 @@ export async function createTasting(repo: Repository, input: TastingInput): Prom
 
   await repo.putTasting(tasting);
   return tasting;
+}
+
+/**
+ * 미연결 캡처에 확인된 와인을 붙인다.
+ * 녹음이 이미 있으면 와인 컨텍스트 폴리싱 대기 상태로, 없으면 녹음 대기 상태로 전이한다.
+ */
+export async function attachWineToTasting(
+  repo: Repository,
+  tastingId: string,
+  input: { wineId: string; labelImageKey?: string },
+): Promise<Tasting> {
+  const tasting = requireFound(await repo.getTasting(tastingId), '시음 세션을 찾을 수 없습니다.');
+  await assertRefsExist([
+    refCheck('wineId', input.wineId, async () => (await repo.getWine(input.wineId)) !== undefined),
+  ]);
+
+  const bundle = await repo.queryTastingBundle(tastingId);
+  return repo.patchTasting(tastingId, tasting.rev, {
+    wineId: input.wineId,
+    labelImageKey: input.labelImageKey,
+    lifecycle: bundle.recordings.length > 0 ? 'polishing' : 'awaiting_audio',
+  });
 }
 
 /**

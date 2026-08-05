@@ -27,6 +27,14 @@ export interface RssFeedInput {
   tastings: TastingSummaryView[];
 }
 
+/**
+ * RSS는 사진/와인 정보와 음성 분석이 모두 완성된 공개 기록만 내보낸다.
+ * lifecycle은 getTimelineView의 공개 필터에서 이미 보장하며, 여기서는 피드 고유 입력을 확인한다.
+ */
+export function isRssEligibleTasting(tasting: TastingSummaryView): boolean {
+  return Boolean(tasting.labelImageKey && tasting.summary);
+}
+
 /** 시음 한 건을 RSS `<item>` 하나로 변환 */
 function buildItem(tasting: TastingSummaryView, baseUrl: string): string {
   const link = `${baseUrl}/tastings/${tasting.tastingId}`;

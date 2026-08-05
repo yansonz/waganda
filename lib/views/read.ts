@@ -66,6 +66,11 @@ function regionDisplayName(regionById: Map<string, Region>, regionId?: string): 
   return regionById.get(regionId)?.name;
 }
 
+/** 미연결·분석 중 캡처는 공개 목록·RSS·통계에 포함하지 않는다. */
+function isPublishedTasting(tasting: Tasting): tasting is Tasting & { wineId: string } {
+  return tasting.wineId !== undefined && (tasting.lifecycle ?? 'ready') === 'ready';
+}
+
 /* ── 와인 요약 뷰 (여러 화면이 공유) ──────────────────────────── */
 
 export interface WineSummaryView {
@@ -122,7 +127,7 @@ export interface TastingSummaryView {
 }
 
 function toTastingSummary(
-  tasting: Tasting,
+  tasting: Tasting & { wineId: string },
   wine: Wine | undefined,
   analysis: Analysis | undefined,
 ): TastingSummaryView {
@@ -161,14 +166,15 @@ async function loadAllTastingSummaries(repo: Repository): Promise<{
     loadCatalog(repo),
   ]);
   const wineById = new Map(wines.map((w) => [w.id, w]));
+  const publishedTastings = tastings.filter(isPublishedTasting);
 
   const summaries: TastingSummaryView[] = [];
-  for (const tasting of tastings) {
+  for (const tasting of publishedTastings) {
     const analysis = await repo.getAnalysis(tasting.id);
     summaries.push(toTastingSummary(tasting, wineById.get(tasting.wineId), analysis));
   }
 
-  return { summaries, tastings, wineById };
+  return { summaries, tastings: publishedTastings, wineById };
 }
 
 /* ── 14.1 대시보드 ────────────────────────────────────────────── */
@@ -277,7 +283,7 @@ export async function getTastingDetailView(
 
   const tasting = bundle.meta;
   const [wine, { regions }, profile] = await Promise.all([
-    repo.getWine(tasting.wineId),
+    tasting.wineId ? repo.getWine(tasting.wineId) : Promise.resolve(undefined),
     loadCatalog(repo),
     getRawTasteProfile(repo),
   ]);
@@ -285,7 +291,9 @@ export async function getTastingDetailView(
   const winery = wine?.wineryId ? await repo.getWinery(wine.wineryId) : undefined;
   const path = wine?.regionId ? regionPath(regions, wine.regionId) : [];
 
-  const { items: allTastingsForWine } = await listTastingsForWine(repo, tasting.wineId);
+  const allTastingsForWine = tasting.wineId
+    ? (await listTastingsForWine(repo, tasting.wineId)).items
+    : [];
   const pastTastingsForWine = allTastingsForWine.filter((t) => t.tastingId !== tastingId);
 
   const fitInput: FitAssessmentWineInput = {
@@ -339,7 +347,7 @@ export async function getWineListView(
   const { items: allTastings } = await repo.listByType<Tasting>('TASTING', 'asc');
 
   const tastingsByWine = new Map<string, Tasting[]>();
-  for (const t of allTastings) {
+  for (const t of allTastings.filter((t): t is Tasting & { wineId: string } => t.wineId !== undefined)) {
     const list = tastingsByWine.get(t.wineId) ?? [];
     list.push(t);
     tastingsByWine.set(t.wineId, list);
@@ -456,7 +464,7 @@ async function listTastingsForWine(
   const { items: allTastings } = await repo.listByType<Tasting>('TASTING', 'asc');
   const wine = await repo.getWine(wineId);
   const relevant = allTastings
-    .filter((t) => t.wineId === wineId)
+    .filter((t): t is Tasting & { wineId: string } => isPublishedTasting(t) && t.wineId === wineId)
     .sort((a, b) => a.tastedAt.localeCompare(b.tastedAt));
 
   const items: TastingSummaryView[] = [];

@@ -214,6 +214,9 @@ export async function runLocalAnalysis(
   if (!bundle.meta) throw new Error(`시음을 찾을 수 없습니다: ${tastingId}`);
   const recording = bundle.recordings[0];
   if (!recording) throw new Error('녹음이 없습니다. 먼저 /record 에서 녹음을 남기세요.');
+  if (!bundle.meta.wineId) {
+    throw new Error('와인 정보가 아직 없습니다. 라벨 사진이나 이름을 연결한 뒤 분석하세요.');
+  }
 
   const wine = await repo.getWine(bundle.meta.wineId);
 

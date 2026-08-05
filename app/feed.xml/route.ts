@@ -1,7 +1,7 @@
 import { DynamoDbRepository } from '@/lib/db/repository';
 import { getTimelineView } from '@/lib/views/read';
 import { getPublicBaseUrl } from '@/lib/config';
-import { buildRssFeed } from '@/lib/rss';
+import { buildRssFeed, isRssEligibleTasting } from '@/lib/rss';
 
 /**
  * app/feed.xml/route.ts — 타임라인 RSS 2.0 피드 (docs/issues/timeline-rss-feed-feasibility.md).
@@ -24,7 +24,7 @@ export async function GET(): Promise<Response> {
     title: '와간다 — 타임라인',
     description: '날짜순으로 모든 시음 기록을 되짚어봅니다',
     baseUrl,
-    tastings: tastings.slice(0, FEED_ITEM_LIMIT),
+    tastings: tastings.filter(isRssEligibleTasting).slice(0, FEED_ITEM_LIMIT),
   });
 
   return new Response(xml, {

@@ -52,6 +52,11 @@ export function makePersistAndPublishNode(deps: PersistAndPublishDeps) {
       });
     }
 
+    const tasting = await deps.repo.getTasting(ctx.tastingId);
+    if (tasting) {
+      await deps.repo.patchTasting(ctx.tastingId, tasting.rev, { lifecycle: 'ready' });
+    }
+
     // CloudFront 무효화 — design.md '캐시 및 무효화 전략': 단일 `/*` 패턴을 쓴다.
     await deps.cloudFrontClient.send(
       new CreateInvalidationCommand({

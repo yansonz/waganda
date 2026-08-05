@@ -9,6 +9,24 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import RecordPage from '@/app/record/page';
 
+vi.mock('@/components/record/AudioRecorder', () => ({
+  AudioRecorder: ({
+    onRecordingComplete,
+  }: {
+    onRecordingComplete: (blob: Blob, meta: { durationSec: number; mimeType: string }) => void;
+  }) => (
+    <div>
+      <button type="button">녹음 시작</button>
+      <button
+        type="button"
+        onClick={() => onRecordingComplete(new Blob(['audio']), { durationSec: 1, mimeType: 'audio/webm' })}
+      >
+        녹음 완료
+      </button>
+    </div>
+  ),
+}));
+
 /** 요청 URL 별로 응답을 돌려주는 fetch 스텁 */
 function stubFetch(overrides: Record<string, unknown> = {}) {
   const calls: { url: string; method: string; body?: unknown }[] = [];
@@ -26,6 +44,9 @@ function stubFetch(overrides: Record<string, unknown> = {}) {
       },
     },
     '/api/wines': { wine: { id: 'wine-1' } },
+    '/api/tastings/tasting-1/wine': { tasting: { id: 'tasting-1', wineId: 'wine-1' } },
+    '/api/tastings/tasting-1/recordings': { uploadUrl: 'https://s3.test/audio-put' },
+    '/api/tastings/tasting-1/analyze': { jobStatus: 'queued' },
     '/api/tastings': { tastingId: 'tasting-1' },
     ...overrides,
   };
@@ -42,7 +63,9 @@ function stubFetch(overrides: Record<string, unknown> = {}) {
     // S3 사전 서명 업로드
     if (url.startsWith('https://s3.test')) return new Response(null, { status: 200 });
 
-    const key = Object.keys(routes).find((route) => url.startsWith(route));
+    const key = Object.keys(routes)
+      .sort((a, b) => b.length - a.length)
+      .find((route) => url.startsWith(route));
     if (!key) return new Response('not found', { status: 404 });
 
     const payload = routes[key];
@@ -201,13 +224,51 @@ describe('/record — 1단계 라벨 사진', () => {
 });
 
 describe('/record — 2단계 녹음', () => {
-  it('와인을 확인하기 전에는 녹음할 수 없다', async () => {
-    stubFetch();
+  it('사진 전에 녹음 우선 캡처를 시작할 수 있다', async () => {
+    const { calls } = stubFetch();
     render(<RecordPage />);
 
     await waitFor(() => expect(screen.getByLabelText('라벨 사진 올리기')).toBeInTheDocument());
-    expect(screen.getByText('와인을 먼저 확인하면 녹음할 수 있습니다.')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /녹음 시작/ })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: '지금 반응 녹음하기' }));
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /녹음 시작/ })).toBeInTheDocument());
+    const captureCall = calls.find((call) => call.url === '/api/tastings');
+    expect(captureCall?.body).toEqual(expect.objectContaining({ tastedAt: expect.any(String) }));
+    expect(captureCall?.body).not.toHaveProperty('wineId');
+  });
+
+  it('녹음 뒤 사진을 붙이면 기존 캡처에 와인을 연결한다', async () => {
+    const { calls } = stubFetch();
+    render(<RecordPage />);
+
+    await waitFor(() => expect(screen.getByLabelText('라벨 사진 올리기')).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: '지금 반응 녹음하기' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: /녹음 시작/ })).toBeInTheDocument());
+
+    await attachPhoto();
+    await waitFor(
+      () => expect(screen.getByText(/Château Margaux 2015 · 프랑스/)).toBeInTheDocument(),
+      { timeout: 5000 },
+    );
+
+    const attachCall = calls.find((call) => call.url === '/api/tastings/tasting-1/wine');
+    expect(attachCall?.body).toEqual({ wineId: 'wine-1', labelImageKey: 'labels/abc.jpg' });
+    expect(calls.filter((call) => call.url === '/api/tastings')).toHaveLength(1);
+  });
+
+  it('녹음 먼저인 캡처에 사진을 붙이면 최종 분석을 예약한다', async () => {
+    const { calls } = stubFetch();
+    render(<RecordPage />);
+
+    await waitFor(() => expect(screen.getByLabelText('라벨 사진 올리기')).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: '지금 반응 녹음하기' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: '녹음 완료' })).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: '녹음 완료' }));
+    await waitFor(() => expect(calls.some((call) => call.url.endsWith('/recordings'))).toBe(true));
+
+    await attachPhoto();
+    await waitFor(() => expect(calls.some((call) => call.url.endsWith('/analyze'))).toBe(true));
+    expect(calls.find((call) => call.url === '/api/tastings/tasting-1/analyze')?.body).toEqual({});
   });
 
   it('와인을 확인하면 녹음 컨트롤이 나타난다', async () => {

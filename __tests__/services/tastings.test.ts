@@ -4,6 +4,7 @@ import type { Repository, TastingBundle } from '@/lib/db/repository';
 import { ReferenceIntegrityError } from '@/lib/db/errors';
 import {
   RecordingLimitExceededError,
+  attachWineToTasting,
   createRecording,
   createTasting,
   deleteTasting,
@@ -109,8 +110,22 @@ describe('createTasting', () => {
     });
 
     expect(tasting.wineId).toBe('w1');
+    expect(tasting.lifecycle).toBe('awaiting_audio');
     expect(tasting.priceBand).toBe('20k_50k');
     expect(putTasting).toHaveBeenCalledOnce();
+  });
+
+  it('wineId 없이 캡처를 생성하고 와인 조회를 하지 않는다', async () => {
+    const getWine = vi.fn();
+    const putTasting = vi.fn(async () => undefined);
+    const repo = makeRepo({ getWine, putTasting });
+
+    const tasting = await createTasting(repo, { tastedAt: '2025-01-01T00:00:00Z' });
+
+    expect(tasting.wineId).toBeUndefined();
+    expect(tasting.lifecycle).toBe('collecting');
+    expect(getWine).not.toHaveBeenCalled();
+    expect(putTasting).toHaveBeenCalledWith(tasting);
   });
 
   it('시음자 정보를 받지 않는다 — TastingInput 에 시음자 필드가 없다', async () => {
@@ -120,6 +135,40 @@ describe('createTasting', () => {
     });
     const tasting = await createTasting(repo, { wineId: 'w1', tastedAt: '2025-01-01T00:00:00Z' });
     expect('taster' in tasting).toBe(false);
+  });
+});
+
+describe('attachWineToTasting', () => {
+  it('녹음이 있는 미연결 캡처를 폴리싱 대기 상태로 전이한다', async () => {
+    const patchTasting = vi.fn(async (_id: string, _rev: number, patch: Partial<Tasting>) => ({
+      ...baseTasting,
+      ...patch,
+    }));
+    const repo = makeRepo({
+      getTasting: async () => ({ ...baseTasting, wineId: undefined, lifecycle: 'collecting' }),
+      getWine: async () => ({ id: 'wine-1' }) as never,
+      queryTastingBundle: async () => ({
+        recordings: [{ id: 'recording-1' }] as Recording[],
+        quarantined: [],
+      }),
+      patchTasting,
+    });
+
+    const tasting = await attachWineToTasting(repo, 't1', {
+      wineId: 'wine-1',
+      labelImageKey: 'labels/first.jpg',
+    });
+
+    expect(tasting).toMatchObject({
+      wineId: 'wine-1',
+      labelImageKey: 'labels/first.jpg',
+      lifecycle: 'polishing',
+    });
+    expect(patchTasting).toHaveBeenCalledWith(
+      't1',
+      baseTasting.rev,
+      expect.objectContaining({ lifecycle: 'polishing' }),
+    );
   });
 });
 
