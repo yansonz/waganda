@@ -153,6 +153,21 @@ describe('WagandaWebStack', () => {
     });
   });
 
+  it('웹 Lambda 는 DynamoDB 레코드를 삭제할 수 있다', () => {
+    // 시음·와인·와이너리·지역 삭제 API는 모두 DynamoDB DeleteItem을 호출한다.
+    // 이 권한이 없으면 인증·라우팅은 통과한 뒤 Lambda에서 AccessDenied로 실패한다.
+    template.hasResourceProperties('AWS::IAM::Policy', {
+      PolicyDocument: Match.objectLike({
+        Statement: Match.arrayWith([
+          Match.objectLike({
+            Sid: 'DynamoDBAccess',
+            Action: Match.arrayWith(['dynamodb:DeleteItem']),
+          }),
+        ]),
+      }),
+    });
+  });
+
   it('웹 Lambda 는 Bedrock 추론 프로파일을 호출할 수 있다', () => {
     // lib/agent/labelDirect.ts 등이 웹 프로세스에서 직접 Converse 를 부른다.
     // 권한이 없으면 라벨 인식 폴백·소믈리에 분석이 AccessDenied 로 죽는다.

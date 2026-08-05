@@ -6,6 +6,7 @@ import {
   RecordingLimitExceededError,
   createRecording,
   createTasting,
+  deleteTasting,
   overrideSpeakerMapping,
   updateTasting,
 } from '@/lib/services/tastings';
@@ -190,6 +191,73 @@ describe('updateTasting — 원본 AI 생성물 보존', () => {
       0,
       expect.objectContaining({ priceKrw: 150_000, priceBand: '100k_200k' }),
     );
+  });
+});
+
+describe('deleteTasting — 하위 레코드 정리', () => {
+  it('녹음·분석·작업을 지운 뒤 시음 메타 레코드를 마지막에 삭제한다', async () => {
+    const recordings: Recording[] = [
+      {
+        id: 'rec1',
+        type: 'RECORDING',
+        tastingId: 't1',
+        audioKey: 'recordings/t1/rec1.mp3',
+        durationSec: 30,
+        format: 'mp3',
+        schemaVersion: 2,
+        createdAt: '2025-01-01T00:00:00Z',
+        updatedAt: '2025-01-01T00:00:00Z',
+        rev: 0,
+      },
+      {
+        id: 'rec2',
+        type: 'RECORDING',
+        tastingId: 't1',
+        audioKey: 'recordings/t1/rec2.mp3',
+        durationSec: 60,
+        format: 'm4a',
+        schemaVersion: 2,
+        createdAt: '2025-01-01T00:00:00Z',
+        updatedAt: '2025-01-01T00:00:00Z',
+        rev: 0,
+      },
+    ];
+    const operations: string[] = [];
+    const repo = makeRepo({
+      getTasting: async () => baseTasting,
+      queryTastingBundle: async () => ({
+        recordings,
+        analysis: baseAnalysis,
+        job: {
+          type: 'JOB',
+          tastingId: 't1',
+          status: 'completed',
+          completedSteps: [],
+          attempts: 0,
+          schemaVersion: 2,
+          createdAt: '2025-01-01T00:00:00Z',
+          updatedAt: '2025-01-01T00:00:00Z',
+          rev: 0,
+        },
+        quarantined: [],
+      }),
+      deleteRecording: async (_tastingId, recordingId) => {
+        operations.push(`recording:${recordingId}`);
+      },
+      deleteAnalysis: async () => {
+        operations.push('analysis');
+      },
+      deleteJob: async () => {
+        operations.push('job');
+      },
+      deleteTasting: async () => {
+        operations.push('tasting');
+      },
+    });
+
+    await deleteTasting(repo, 't1');
+
+    expect(operations).toEqual(['recording:rec1', 'recording:rec2', 'analysis', 'job', 'tasting']);
   });
 });
 

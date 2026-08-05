@@ -97,9 +97,27 @@ export async function updateTasting(
   return { tasting, analysis };
 }
 
-/** 시음 세션 삭제 */
+/**
+ * 시음 세션과 같은 파티션의 하위 레코드를 함께 삭제한다.
+ *
+ * 녹음·분석·작업을 먼저 지우고 META를 마지막에 지워, 중간 실패가 나도
+ * 목록에서 사라진 시음에 고아 하위 레코드만 남는 상황을 피한다.
+ * S3 원본 파일 정리는 이 서비스의 Repository 범위 밖이므로 여기서 수행하지 않는다.
+ */
 export async function deleteTasting(repo: Repository, id: string): Promise<void> {
   requireFound(await repo.getTasting(id), '삭제할 시음 세션을 찾을 수 없습니다.');
+
+  const bundle = await repo.queryTastingBundle(id);
+  for (const recording of bundle.recordings) {
+    await repo.deleteRecording(id, recording.id);
+  }
+  if (bundle.analysis) {
+    await repo.deleteAnalysis(id);
+  }
+  if (bundle.job) {
+    await repo.deleteJob(id);
+  }
+
   await repo.deleteTasting(id);
 }
 
