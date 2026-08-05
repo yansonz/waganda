@@ -24,6 +24,33 @@ describe('<EditActionButton>', () => {
     expect(screen.getByRole('button', { name: '삭제' })).toBeInTheDocument();
   });
 
+  it('삭제 요청이 실패하면 API의 오류 사유를 표시한다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ message: '삭제 권한이 없습니다.' }), { status: 500 }),
+      ),
+    );
+
+    const user = userEvent.setup();
+    render(
+      <EditActionButton
+        formId="test-form-error"
+        endpoint="/api/tastings/t1"
+        method="DELETE"
+        ariaLabel="삭제"
+      >
+        삭제
+      </EditActionButton>,
+    );
+
+    await user.click(screen.getByRole('button', { name: '삭제' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('삭제 권한이 없습니다.');
+    vi.unstubAllGlobals();
+  });
+
   it('클릭 시 401 UNAUTHORIZED 응답을 받으면 로그인 화면으로 이동한다', async () => {
     const loginUrl = '/api/auth/google/start?returnTo=%2Ftastings%2Ft1';
     vi.stubGlobal(

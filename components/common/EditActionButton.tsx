@@ -40,9 +40,11 @@ export function EditActionButton({
 }: EditActionButtonProps): ReactElement {
   const { runWriteAction } = useWriteAction({ formId });
   const [isPending, setIsPending] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   async function handleClick(): Promise<void> {
     setIsPending(true);
+    setErrorMessage(null);
     try {
       const response = await runWriteAction(
         endpoint,
@@ -55,24 +57,40 @@ export function EditActionButton({
       );
       if (response.ok) {
         onSuccess?.(response);
+        return;
       }
+
+      // 401은 runWriteAction이 로그인 흐름으로 전환한다.
+      if (response.status !== 401) {
+        const body = (await response.json().catch(() => ({}))) as { message?: string };
+        setErrorMessage(body.message ?? `요청을 처리하지 못했습니다. (오류 ${response.status})`);
+      }
+    } catch {
+      setErrorMessage('네트워크 오류로 요청을 처리하지 못했습니다. 다시 시도해 주세요.');
     } finally {
       setIsPending(false);
     }
   }
 
   return (
-    <button
-      type="button"
-      aria-label={ariaLabel}
-      disabled={isPending}
-      onClick={handleClick}
-      className={
-        className ??
-        'rounded-md border border-gold-500/40 px-3 py-1.5 text-sm text-cream-100 hover:bg-ink-800 disabled:opacity-50'
-      }
-    >
-      {isPending ? '처리 중…' : children}
-    </button>
+    <>
+      <button
+        type="button"
+        aria-label={ariaLabel}
+        disabled={isPending}
+        onClick={handleClick}
+        className={
+          className ??
+          'rounded-md border border-gold-500/40 px-3 py-1.5 text-sm text-cream-100 hover:bg-ink-800 disabled:opacity-50'
+        }
+      >
+        {isPending ? '처리 중…' : children}
+      </button>
+      {errorMessage && (
+        <p role="alert" className="text-sm text-burgundy-300">
+          {errorMessage}
+        </p>
+      )}
+    </>
   );
 }
