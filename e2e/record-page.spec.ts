@@ -35,15 +35,16 @@ test.describe('/record — 로그인한 편집자', () => {
     expect(await response?.json()).toMatchObject({ authenticated: true });
   });
 
-  test('1단계 캡처 UI 가 보이고 저장 버튼은 없다', async ({ page }) => {
+  test('순서와 무관한 캡처 UI 가 보이고 저장 버튼은 없다', async ({ page }) => {
     await page.goto('/record');
 
-    await expect(page.getByText('1 · 무슨 와인이에요?')).toBeVisible();
+    await expect(page.getByText('와인 라벨 · 나중에 붙여도 됩니다')).toBeVisible();
     await expect(page.getByLabel('라벨 사진 올리기')).toBeAttached();
     await expect(page.getByRole('button', { name: '사진 없이 이름만 입력' })).toBeVisible();
 
-    // 녹음은 와인 확인 후에만 가능하다
-    await expect(page.getByText('와인을 먼저 확인하면 녹음할 수 있습니다.')).toBeVisible();
+    // 라벨 확인 전에도 녹음부터 시작할 수 있다.
+    await expect(page.getByRole('heading', { name: '반응 녹음' })).toBeVisible();
+    await expect(page.getByRole('button', { name: '지금 반응 녹음하기' })).toBeVisible();
 
     // 저장 버튼을 두지 않는다 (녹음 종료 시 자동 저장)
     await expect(page.getByRole('button', { name: /저장/ })).toHaveCount(0);
@@ -96,7 +97,7 @@ test.describe('/record — 로그인한 편집자', () => {
     await page.goto('/timeline');
     await page.getByRole('link', { name: /시음 기록 추가/ }).click();
     await expect(page).toHaveURL(/\/record$/);
-    await expect(page.getByText('1 · 무슨 와인이에요?')).toBeVisible();
+    await expect(page.getByRole('button', { name: '지금 반응 녹음하기' })).toBeVisible();
   });
 
   test('시음 상세에서 수정·삭제·수동 평점 컨트롤이 보인다', async ({ page }) => {
