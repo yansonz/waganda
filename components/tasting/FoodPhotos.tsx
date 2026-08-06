@@ -106,9 +106,16 @@ export function FoodPhotos({
         body: JSON.stringify({ imageKey, rev }),
       });
       if (!confirmResponse.ok) {
-        if (confirmResponse.status !== 401) {
-          setErrorMessage('사진을 기록에 반영하지 못했습니다. 다시 시도해 주세요.');
+        if (confirmResponse.status === 401) {
+          // runWriteAction 이 로그인 흐름으로 전환한다.
+          return;
         }
+        if (confirmResponse.status === 409) {
+          // rev 불일치 — 다른 편집이 먼저 반영됐다. 새로고침으로 최신 rev 를 받아야 한다.
+          setErrorMessage('다른 곳에서 먼저 수정되었습니다. 화면을 새로 고친 뒤 다시 시도해 주세요.');
+          return;
+        }
+        setErrorMessage('사진을 기록에 반영하지 못했습니다. 다시 시도해 주세요.');
         return;
       }
 
@@ -136,9 +143,14 @@ export function FoodPhotos({
         window.location.reload();
         return;
       }
-      if (response.status !== 401) {
-        setErrorMessage('사진을 삭제하지 못했습니다. 다시 시도해 주세요.');
+      if (response.status === 401) {
+        return;
       }
+      if (response.status === 409) {
+        setErrorMessage('다른 곳에서 먼저 수정되었습니다. 화면을 새로 고친 뒤 다시 시도해 주세요.');
+        return;
+      }
+      setErrorMessage('사진을 삭제하지 못했습니다. 다시 시도해 주세요.');
     } catch {
       setErrorMessage('네트워크 오류로 사진을 삭제하지 못했습니다. 다시 시도해 주세요.');
     } finally {

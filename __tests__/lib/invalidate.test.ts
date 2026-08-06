@@ -37,4 +37,19 @@ describe('invalidateCache', () => {
       paths: ['/*'],
     });
   });
+
+  it('발행이 던져도 예외를 전파하지 않고 invalidated:false 로 반환한다 (이미 커밋된 쓰기 보호)', async () => {
+    // CloudFront 스로틀링·동시 무효화 한도 초과를 모사한다.
+    process.env.WAGANDA_CF_DISTRIBUTION_ID = 'DIST123';
+    const createInvalidation = vi.fn(async () => {
+      throw new Error('TooManyInvalidationsInProgress');
+    });
+    setCloudFrontInvalidator({ createInvalidation });
+
+    // 던지지 않아야 한다 — 던지면 호출한 쓰기 라우트가 성공을 500 으로 뒤집는다.
+    const result = await invalidateCache();
+
+    expect(result.invalidated).toBe(false);
+    expect(result.error).toContain('TooManyInvalidationsInProgress');
+  });
 });
