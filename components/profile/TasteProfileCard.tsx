@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import type { ProfileAttribute } from '@waganda/schemas';
 import { NotesRadar } from '@/components/tasting/NotesRadar';
+import { SimpleMarkdown } from '@/components/common/SimpleMarkdown';
 import type { TasteProfileView } from '@/lib/views/read';
 
 /**
@@ -65,7 +66,12 @@ export function TasteProfileCard({ profile }: TasteProfileCardProps): ReactEleme
   return (
     <div className="card p-4">
       <h2 className="font-display text-lg text-cream-100">취향 프로파일</h2>
-      {profile.narrative && <p className="text-cream-200 mt-1 text-sm">{profile.narrative}</p>}
+      {profile.narrative && (
+        <SimpleMarkdown
+          text={profile.narrative}
+          className="text-cream-200 mt-1 flex flex-col gap-1.5 text-sm"
+        />
+      )}
 
       <NotesRadar values={profile.axes ?? {}} size={200} />
 
@@ -109,9 +115,10 @@ export function TasteProfileCard({ profile }: TasteProfileCardProps): ReactEleme
       )}
 
       {profile.shoppingGuide && (
-        <p className="text-muted mt-3 border-t border-gold-500/15 pt-3 text-sm">
-          {profile.shoppingGuide}
-        </p>
+        <SimpleMarkdown
+          text={profile.shoppingGuide}
+          className="text-muted mt-3 flex flex-col gap-1.5 border-t border-gold-500/15 pt-3 text-sm"
+        />
       )}
     </div>
   );

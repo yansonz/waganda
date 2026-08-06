@@ -48,4 +48,24 @@ describe('<TasteProfileCard>', () => {
     expect(screen.getByText('묵직한 바디')).toBeInTheDocument();
     expect(screen.getByText('Nebbiolo')).toBeInTheDocument();
   });
+
+  it('서술의 마크다운 볼드를 별표 없이 굵게 렌더링한다', () => {
+    const profile: TasteProfileView = {
+      active: true,
+      tastingCount: 8,
+      progress: 1,
+      axes: { acidity: 3.3, tannin: 2.2, body: 2.7, aroma: 3.2, finish: 3.2 },
+      liked: [],
+      disliked: [],
+      keywords: [],
+      narrative: '미각은 **중간 정도의 산도(3.3)** 를 선호합니다.',
+      recommendations: [],
+      agreementTrend: [],
+    };
+
+    const { container } = render(<TasteProfileCard profile={profile} />);
+
+    expect(screen.getByText('중간 정도의 산도(3.3)').tagName).toBe('STRONG');
+    expect(container.textContent).not.toContain('**');
+  });
 });
