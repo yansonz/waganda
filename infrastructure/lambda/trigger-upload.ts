@@ -71,6 +71,33 @@ function generateSessionId(tastingId: string, env: string): string {
   return sessionId.length >= 33 ? sessionId : sessionId.padEnd(33, '0');
 }
 
+/**
+ * 신규 Job 레코드를 만든다.
+ *
+ * `@waganda/schemas` 의 Job 스키마가 요구하는 필드를 빠짐없이 채운다.
+ * type·schemaVersion·rev 가 없으면 에이전트(AgentCore)의 getJob 이 Zod 검증에서
+ * 터져 500 을 반환하고, 전사가 시작되지 않은 채 Job 이 'transcribing' 에서
+ * 영구히 멈춘다. schemaVersion 은 CURRENT_SCHEMA_VERSION(=2) 과 일치시킨다.
+ * (인프라 Lambda 는 스키마 패키지를 번들에 넣지 않으므로 값을 인라인한다 —
+ *  대신 test/trigger-upload-job.test.ts 가 실제 Job 스키마로 검증한다.)
+ */
+export function buildNewJobRecord(tastingId: string): Record<string, unknown> {
+  const nowIso = new Date().toISOString();
+  return {
+    type: 'JOB',
+    pk: `TASTING#${tastingId}`,
+    sk: 'JOB',
+    tastingId,
+    status: 'queued',
+    completedSteps: [],
+    attempts: 0,
+    schemaVersion: 2,
+    rev: 0,
+    createdAt: nowIso,
+    updatedAt: nowIso,
+  };
+}
+
 export async function handler(event: SqsRecord) {
   console.log('trigger-upload Lambda invoked', JSON.stringify(event, null, 2));
 
@@ -132,16 +159,7 @@ export async function handler(event: SqsRecord) {
 
       // 신규 Job 생성
       if (!jobRecord) {
-        jobRecord = {
-          pk: jobPk,
-          sk: jobSk,
-          tastingId,
-          status: 'queued',
-          completedSteps: [],
-          attempts: 0,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
+        jobRecord = buildNewJobRecord(tastingId);
 
         await dynamoDb.send(
           new PutItemCommand({
