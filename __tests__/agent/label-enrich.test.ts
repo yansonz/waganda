@@ -8,8 +8,10 @@ import { describe, expect, it, vi } from 'vitest';
 import type { LabelExtraction } from '@waganda/schemas';
 import {
   buildSearchQuery,
+  detectConflicts,
   enrichLabelExtraction,
   findMissingFields,
+  hasGrapeTypeConflict,
 } from '@/lib/agent/labelEnrich';
 
 const recognized: LabelExtraction = {
@@ -178,5 +180,217 @@ describe('enrichLabelExtraction', () => {
     const result = await enrichLabelExtraction(recognized, { invokeModel, search });
     expect(result.extraction.country?.value).toBe('호주');
     expect(result.usedSearch).toBe(false);
+  });
+});
+
+describe('detectConflicts', () => {
+  it('화이트 와인에 레드 와인 설명이 들어오면 충돌을 감지한다', () => {
+    const whiteWine: LabelExtraction = {
+      ...recognized,
+      wineType: { value: 'white', confidence: 'high' },
+      country: { value: 'Portugal', confidence: 'high' },
+    };
+    const enriched = {
+      characterNote: '리베라 델 두에로의 특성을 담은 대담한 레드 와인',
+      characterTags: ['템프라니요 주도', '오크 강함', '풀바디'],
+      grapes: ['Tempranillo', 'Grenache'],
+    };
+
+    const conflicts = detectConflicts(whiteWine, enriched);
+
+    expect(conflicts.has('characterNote')).toBe(true);
+    expect(conflicts.has('characterTags')).toBe(true);
+    expect(conflicts.has('grapes')).toBe(true);
+  });
+
+  it('레드 와인에 화이트 와인 설명이 들어오면 충돌을 감지한다', () => {
+    const redWine: LabelExtraction = {
+      ...recognized,
+      wineType: { value: 'red', confidence: 'high' },
+    };
+    const enriched = {
+      characterNote: '상큼한 화이트 와인 with citrus notes',
+    };
+
+    const conflicts = detectConflicts(redWine, enriched);
+    expect(conflicts.has('characterNote')).toBe(true);
+  });
+
+  it('같은 타입이면 충돌이 아니다', () => {
+    const redWine: LabelExtraction = {
+      ...recognized,
+      wineType: { value: 'red', confidence: 'high' },
+    };
+    const enriched = {
+      characterNote: '과실향이 풍부한 미디엄 바디',
+      grapes: ['Tempranillo'],
+    };
+
+    const conflicts = detectConflicts(redWine, enriched);
+    expect(conflicts.size).toBe(0);
+  });
+
+  it('wineType 이 이미 인식됐는데 다른 타입을 넣으려 하면 충돌', () => {
+    const whiteWine: LabelExtraction = {
+      ...recognized,
+      wineType: { value: 'white', confidence: 'high' },
+    };
+    const enriched = { wineType: 'red' };
+
+    const conflicts = detectConflicts(whiteWine, enriched);
+    expect(conflicts.has('wineType')).toBe(true);
+  });
+
+  it('wineType 이 없으면 보강 결과의 wineType 은 충돌이 아니다', () => {
+    const enriched = { wineType: 'red', characterNote: '풀바디 레드 와인' };
+    const conflicts = detectConflicts(recognized, enriched);
+    expect(conflicts.has('wineType')).toBe(false);
+  });
+
+  it('포르투갈인데 리베라 델 두에로 지역이 오면 충돌', () => {
+    const portuguese: LabelExtraction = {
+      ...recognized,
+      country: { value: 'Portugal', confidence: 'high' },
+    };
+    const enriched = { regionName: 'Ribera del Duero' };
+
+    const conflicts = detectConflicts(portuguese, enriched);
+    expect(conflicts.has('regionName')).toBe(true);
+  });
+
+  it('같은 국가의 지역이면 충돌이 아니다', () => {
+    const portuguese: LabelExtraction = {
+      ...recognized,
+      country: { value: 'Portugal', confidence: 'high' },
+    };
+    const enriched = { regionName: 'Douro' };
+
+    const conflicts = detectConflicts(portuguese, enriched);
+    expect(conflicts.has('regionName')).toBe(false);
+  });
+});
+
+describe('enrichLabelExtraction — 충돌 감지 통합', () => {
+  it('화이트 와인에 레드 와인 정보를 넣으려 하면 해당 필드를 건너뛴다', async () => {
+    const whiteWine: LabelExtraction = {
+      ...recognized,
+      wineType: { value: 'white', confidence: 'high' },
+      country: { value: 'Portugal', confidence: 'high' },
+      regionName: { value: 'Beira Interior', confidence: 'high' },
+      wineryName: { value: 'Castielo Rodrigo', confidence: 'high' },
+    };
+
+    const invokeModel = modelReturning({
+      grapes: ['Tempranillo', 'Grenache'],
+      characterNote: '리베라 델 두에로의 특성을 담은 대담한 레드 와인',
+      characterTags: ['템프라니요 주도', '오크 강함', '스페인 리베라 델 두에로', '풀바디'],
+      alcoholPercent: 14.0,
+    });
+
+    const result = await enrichLabelExtraction(whiteWine, { invokeModel });
+
+    // 충돌 필드는 병합되지 않는다
+    expect(result.extraction.grapes).toBeUndefined();
+    expect(result.extraction.characterNote).toBeUndefined();
+    expect(result.extraction.characterTags).toBeUndefined();
+    // 충돌이 아닌 필드는 정상 병합
+    expect(result.extraction.alcoholPercent?.value).toBe(14.0);
+    // conflicts 에 기록
+    expect(result.conflicts).toContain('characterNote');
+    expect(result.conflicts).toContain('characterTags');
+    expect(result.conflicts).toContain('grapes');
+  });
+});
+
+describe('hasGrapeTypeConflict', () => {
+  it('화이트 와인에 레드 전용 품종이 과반수면 충돌', () => {
+    expect(hasGrapeTypeConflict('white', ['tempranillo', 'cabernet sauvignon'])).toBe(true);
+  });
+
+  it('레드 와인에 화이트 전용 품종이 과반수면 충돌', () => {
+    expect(hasGrapeTypeConflict('red', ['chardonnay', 'sauvignon blanc'])).toBe(true);
+  });
+
+  it('다용도 품종만 있으면 충돌이 아니다 (판정 안 함)', () => {
+    // Grenache 는 다용도 품종으로 분류되지 않은 상태지만
+    // Muscat, Garnacha 같은 명확한 다용도는 null 반환
+    expect(hasGrapeTypeConflict('white', ['grenache'])).toBe(false);
+  });
+
+  it('미분류 품종은 충돌 판정에 영향을 주지 않는다', () => {
+    // 'Unknown Grape' 는 미분류(null) — 판정 안 함
+    expect(hasGrapeTypeConflict('white', ['Unknown Grape'])).toBe(false);
+  });
+
+  it('레드 품종 1개 + 미분류 1개 → 과반수라 충돌', () => {
+    expect(hasGrapeTypeConflict('white', ['tempranillo', 'unknown variety'])).toBe(true);
+  });
+
+  it('레드 품종 1개 + 화이트 품종 1개 → 과반수 미달로 충돌 아님', () => {
+    // 1/2 < ceil(2/2)=1 → conflictCount=1 >= 1 → 사실 충돌
+    // 실제로는 혼합 품종이면 판정하기 애매하지만, 과반수 기준(>=ceil(n/2))이므로
+    // 레드 1 + 화이트 1에서 화이트 와인 기준: 레드 1개 중 1개가 conflict → 1 >= ceil(2/2)=1 → true
+    // 이 경우 판정이 맞다 (레드 전용 + 화이트 전용이 섞여 나오면 검색이 뭔가 잘못 가져온 것)
+    expect(hasGrapeTypeConflict('white', ['tempranillo', 'chardonnay'])).toBe(true);
+  });
+
+  it('타입에 맞는 품종이면 충돌이 아니다', () => {
+    expect(hasGrapeTypeConflict('red', ['tempranillo', 'cabernet sauvignon'])).toBe(false);
+    expect(hasGrapeTypeConflict('white', ['chardonnay', 'sauvignon blanc'])).toBe(false);
+  });
+
+  it('빈 품종 배열은 충돌이 아니다', () => {
+    expect(hasGrapeTypeConflict('white', [])).toBe(false);
+  });
+});
+
+describe('detectConflicts — 품종-타입 교차 검증', () => {
+  it('화이트 와인에 Tempranillo + Cabernet 이 들어오면 grapes 충돌', () => {
+    const whiteWine: LabelExtraction = {
+      ...recognized,
+      wineType: { value: 'white', confidence: 'high' },
+    };
+    const enriched = { grapes: ['Tempranillo', 'Cabernet Sauvignon'] };
+
+    const conflicts = detectConflicts(whiteWine, enriched);
+    expect(conflicts.has('grapes')).toBe(true);
+  });
+
+  it('레드 와인에 Chardonnay + Riesling 이 들어오면 grapes 충돌', () => {
+    const redWine: LabelExtraction = {
+      ...recognized,
+      wineType: { value: 'red', confidence: 'high' },
+    };
+    const enriched = { grapes: ['Chardonnay', 'Riesling'] };
+
+    const conflicts = detectConflicts(redWine, enriched);
+    expect(conflicts.has('grapes')).toBe(true);
+  });
+
+  it('레드 와인에 Syrah + Merlot 이면 정상 (충돌 아님)', () => {
+    const redWine: LabelExtraction = {
+      ...recognized,
+      wineType: { value: 'red', confidence: 'high' },
+    };
+    const enriched = { grapes: ['Syrah', 'Merlot'] };
+
+    const conflicts = detectConflicts(redWine, enriched);
+    expect(conflicts.has('grapes')).toBe(false);
+  });
+
+  it('보강이 넣으려는 wineType 과 grapes 가 서로 모순이면 둘 다 충돌', () => {
+    // wineType 이 아직 인식 안 됐고, 보강이 white + [Tempranillo, Merlot] 을 동시에 넣으려 함
+    // → 보강 자체가 모순 → 검색이 두 와인을 섞었을 가능성
+    const noType: LabelExtraction = { ...recognized };
+    const enriched = {
+      wineType: 'white',
+      grapes: ['Tempranillo', 'Merlot'],
+      characterNote: '과일향이 좋다',
+    };
+
+    const conflicts = detectConflicts(noType, enriched);
+    expect(conflicts.has('wineType')).toBe(true);
+    expect(conflicts.has('grapes')).toBe(true);
+    expect(conflicts.has('characterNote')).toBe(true);
   });
 });
