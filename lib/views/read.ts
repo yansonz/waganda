@@ -230,13 +230,17 @@ export async function getIncompleteTastingCaptureView(
     }),
   );
 
-  return captures.filter((capture): capture is IncompleteTastingCaptureView => capture !== undefined);
+  return captures.filter(
+    (capture): capture is IncompleteTastingCaptureView => capture !== undefined,
+  );
 }
 
 /* ── 14.1 대시보드 ────────────────────────────────────────────── */
 
 export interface DashboardView {
   recentTastings: TastingSummaryView[];
+  /** 최근 시음 목록보다 더 많은 시음이 있는지 (타임라인 '더보기' 노출 여부) */
+  hasMoreTastings: boolean;
   tasteProfile: TasteProfileView;
   recentAgreementScores: { tastingId: string; tastedAt: string; score: number }[];
   latestDiscoveries: DiscoveryView[];
@@ -259,6 +263,7 @@ export async function getDashboardView(repo: Repository): Promise<DashboardView>
   const { summaries } = await loadAllTastingSummaries(repo);
 
   const recentTastings = summaries.slice(0, DASHBOARD_RECENT_TASTINGS_LIMIT);
+  const hasMoreTastings = summaries.length > DASHBOARD_RECENT_TASTINGS_LIMIT;
 
   const recentAgreementScores = summaries
     .filter((s) => s.agreementScore !== undefined)
@@ -279,7 +284,14 @@ export async function getDashboardView(repo: Repository): Promise<DashboardView>
   // 진행 중인 작업은 전체 시음을 순회해 job 상태를 개별 조회한다.
   const inProgressJobs = await loadInProgressJobs(repo, summaries);
 
-  return { recentTastings, tasteProfile, recentAgreementScores, latestDiscoveries, inProgressJobs };
+  return {
+    recentTastings,
+    hasMoreTastings,
+    tasteProfile,
+    recentAgreementScores,
+    latestDiscoveries,
+    inProgressJobs,
+  };
 }
 
 const IN_PROGRESS_JOB_STATUSES: ReadonlySet<Job['status']> = new Set([
@@ -403,7 +415,9 @@ export async function getWineListView(
   const { items: allTastings } = await repo.listByType<Tasting>('TASTING', 'asc');
 
   const tastingsByWine = new Map<string, Tasting[]>();
-  for (const t of allTastings.filter((t): t is Tasting & { wineId: string } => t.wineId !== undefined)) {
+  for (const t of allTastings.filter(
+    (t): t is Tasting & { wineId: string } => t.wineId !== undefined,
+  )) {
     const list = tastingsByWine.get(t.wineId) ?? [];
     list.push(t);
     tastingsByWine.set(t.wineId, list);

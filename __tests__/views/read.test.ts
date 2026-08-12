@@ -33,6 +33,7 @@ describe('lib/views/read — 데이터 없는 상태', () => {
     const view = await getDashboardView(repo);
 
     expect(view.recentTastings).toEqual([]);
+    expect(view.hasMoreTastings).toBe(false);
     expect(view.tasteProfile.active).toBe(false);
     expect(view.tasteProfile.progress).toBe(0);
     expect(view.recentAgreementScores).toEqual([]);
@@ -174,6 +175,7 @@ describe('lib/views/read — getDashboardView', () => {
     const view = await getDashboardView(repo);
 
     expect(view.recentTastings).toHaveLength(5);
+    expect(view.hasMoreTastings).toBe(true);
     expect(view.recentAgreementScores.length).toBeGreaterThan(0);
     expect(view.latestDiscoveries).toHaveLength(1);
     expect(view.inProgressJobs).toEqual([
