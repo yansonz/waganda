@@ -204,9 +204,20 @@ export function detectConflicts(
 
 /** 인식된 와인 타입과 텍스트 사이에 모순이 있는지 확인 */
 function hasTypeConflictInText(knownType: string, text: string): boolean {
-  const RED_KEYWORDS = ['레드 와인', 'red wine', '레드와인', '풀바디 레드', 'bold red'];
-  const WHITE_KEYWORDS = ['화이트 와인', 'white wine', '화이트와인', '상큼한 화이트'];
-  const ROSE_KEYWORDS = ['로제 와인', 'rosé wine', 'rose wine'];
+  const RED_KEYWORDS = [
+    '레드 와인', 'red wine', '레드와인', '풀바디 레드', 'bold red',
+    '스페인 레드', '이탈리아 레드', '프랑스 레드', '호주 레드',
+    '템프라니요', 'tempranillo', '카베르네', 'cabernet', '시라', 'syrah', 'shiraz',
+    '메를로', 'merlot', '피노 누아', 'pinot noir', '산지오베제', 'sangiovese',
+    '네비올로', 'nebbiolo', '말벡', 'malbec',
+  ];
+  const WHITE_KEYWORDS = [
+    '화이트 와인', 'white wine', '화이트와인', '상큼한 화이트',
+    '스페인 화이트', '이탈리아 화이트', '프랑스 화이트',
+    '샤르도네', 'chardonnay', '소비뇽 블랑', 'sauvignon blanc',
+    '리슬링', 'riesling', '피노 그리', 'pinot grigio', 'pinot gris',
+  ];
+  const ROSE_KEYWORDS = ['로제 와인', 'rosé wine', 'rose wine', '로제'];
 
   if (knownType === 'white') {
     return [...RED_KEYWORDS, ...ROSE_KEYWORDS].some((kw) => text.includes(kw));
