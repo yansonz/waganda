@@ -59,6 +59,18 @@ export default async function DashboardPage(): Promise<ReactElement> {
                 <TastingCard tasting={tasting} />
               </li>
             ))}
+            {view.hasMoreTastings && (
+              <li>
+                <Link
+                  href="/timeline"
+                  aria-label="타임라인에서 전체 시음 보기"
+                  className="card flex h-full min-h-[6rem] flex-col items-center justify-center gap-1 border-dashed p-4 text-center transition-colors hover:border-gold-500/40"
+                >
+                  <span className="font-display text-cream-100">더보기</span>
+                  <span className="text-muted text-sm">타임라인에서 전체 보기 →</span>
+                </Link>
+              </li>
+            )}
           </ul>
         )}
       </section>
