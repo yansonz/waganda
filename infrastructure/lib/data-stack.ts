@@ -27,7 +27,7 @@ export class WagandaDataStack extends Stack {
   public readonly audioEcrRepo: ecr.Repository;
   /** Claude Haiku 4.5 (기본 모델) */
   public readonly haikuProfile: bedrock.CfnApplicationInferenceProfile;
-  /** Claude Sonnet 5 */
+  /** Claude Sonnet 4.6 */
   public readonly sonnetProfile: bedrock.CfnApplicationInferenceProfile;
   /** Claude Opus 5 */
   public readonly opusProfile: bedrock.CfnApplicationInferenceProfile;
@@ -175,8 +175,8 @@ export class WagandaDataStack extends Stack {
     );
     this.sonnetProfile = createInferenceProfile(
       'SonnetInferenceProfile',
-      `waganda-sonnet-5-${envConfig.resourceSuffix}`,
-      'global.anthropic.claude-sonnet-5',
+      `waganda-sonnet-4-6-${envConfig.resourceSuffix}`,
+      'global.anthropic.claude-sonnet-4-6',
     );
     this.opusProfile = createInferenceProfile(
       'OpusInferenceProfile',
@@ -192,7 +192,7 @@ export class WagandaDataStack extends Stack {
     });
     new CfnOutput(this, 'SonnetInferenceProfileArnOutput', {
       value: this.sonnetProfile.attrInferenceProfileArn,
-      description: 'Claude Sonnet 5 application inference profile ARN',
+      description: 'Claude Sonnet 4.6 application inference profile ARN',
     });
     new CfnOutput(this, 'OpusInferenceProfileArnOutput', {
       value: this.opusProfile.attrInferenceProfileArn,

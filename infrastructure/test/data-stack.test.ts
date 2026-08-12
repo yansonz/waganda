@@ -187,7 +187,7 @@ describe('Data Stack Validation', () => {
 
     for (const source of [
       'global.anthropic.claude-haiku-4-5-20251001-v1:0',
-      'global.anthropic.claude-sonnet-5',
+      'global.anthropic.claude-sonnet-4-6',
       'global.anthropic.claude-opus-5',
     ]) {
       expect(serialized.some((s) => s.includes(`inference-profile/${source}`))).toBe(true);
